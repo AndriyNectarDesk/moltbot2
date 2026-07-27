@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+		<title>DANYLO: NECTAR NOVA</title>
+		<link rel="stylesheet" href="./style.css" />
+		<script type="importmap">
+			{
+				"imports": {
+					"three": "./vendor/three.module.min.js",
+					"three/addons/": "./vendor/jsm/"
+				}
+			}
+		</script>
+	</head>
+	<body>
+		<div id="app">
+			<canvas id="scene"></canvas>
+
+			<!-- ============ HUD ============ -->
+			<div id="hud" class="hidden">
+				<div id="vignette"></div>
+				<div id="ultflash"></div>
+
+				<div id="crosshair">
+					<span class="ch ch-t"></span>
+					<span class="ch ch-b"></span>
+					<span class="ch ch-l"></span>
+					<span class="ch ch-r"></span>
+					<span class="ch-dot"></span>
+					<svg id="charge-ring" viewBox="0 0 100 100">
+						<circle cx="50" cy="50" r="44" />
+					</svg>
+				</div>
+				<div id="hitmarker">
+					<span></span><span></span><span></span><span></span>
+				</div>
+
+				<!-- top left: hero card -->
+				<div id="hero-card">
+					<canvas id="portrait" width="128" height="128"></canvas>
+					<div class="hc-body">
+						<div class="hc-name">CAPTAIN DANYLO</div>
+						<div class="bar bar-hp">
+							<i id="hp-fill"></i><i id="hp-ghost"></i>
+							<span id="hp-text">100</span>
+						</div>
+						<div class="bar bar-en">
+							<i id="en-fill"></i>
+							<span id="en-text">ENERGY</span>
+						</div>
+					</div>
+				</div>
+
+				<!-- top right: score -->
+				<div id="score-box">
+					<div id="wave-label">WAVE <b id="wave-num">1</b></div>
+					<div id="score">0</div>
+					<div id="combo" class="hidden">x<b>1</b> <i></i></div>
+				</div>
+
+				<!-- bottom: abilities -->
+				<div id="abilities">
+					<div class="ab" id="ab-dash"><b>SHIFT</b><span>DASH</span><i></i></div>
+					<div class="ab" id="ab-hover"><b>SPACE</b><span>FLY</span><i></i></div>
+					<div class="ab ult" id="ab-ult"><b>Q</b><span>NOVA</span><i></i></div>
+				</div>
+
+				<!-- boss -->
+				<div id="boss-bar" class="hidden">
+					<div class="bb-name">MOLTBOT PRIME</div>
+					<div class="bb-track"><i id="bb-fill"></i></div>
+				</div>
+
+				<div id="banner"></div>
+				<div id="killfeed"></div>
+				<div id="floaters"></div>
+				<div id="low-health-warn" class="hidden">CRITICAL</div>
+			</div>
+
+			<!-- ============ SCREENS ============ -->
+			<div id="title" class="screen">
+				<div class="t-inner">
+					<div class="t-kicker">NECTAR FORCE PRESENTS</div>
+					<h1 class="t-title"><span>DANYLO</span><em>NECTAR NOVA</em></h1>
+					<p class="t-sub">
+						The Glitch Legion swarmed the sky-city. One kid stands between them and everything.
+						<br />Suit up, hero.
+					</p>
+					<button id="btn-play">LAUNCH</button>
+					<div class="t-keys">
+						<div><b>WASD</b> move</div>
+						<div><b>MOUSE</b> aim</div>
+						<div><b>CLICK</b> plasma</div>
+						<div><b>RIGHT-CLICK</b> charge beam</div>
+						<div><b>SPACE</b> jump / hold to fly</div>
+						<div><b>SHIFT</b> super dash</div>
+						<div><b>Q</b> nova blast</div>
+						<div><b>ESC</b> pause &nbsp;•&nbsp; <b>M</b> mute</div>
+					</div>
+					<div class="t-foot">Best on a desktop browser with a mouse.</div>
+				</div>
+			</div>
+
+			<div id="pause" class="screen hidden">
+				<div class="t-inner">
+					<h2>PAUSED</h2>
+					<button id="btn-resume">RESUME</button>
+					<button class="ghost" id="btn-quit">ABANDON MISSION</button>
+					<label class="toggle"><input type="checkbox" id="opt-shake" checked /> Screen shake</label>
+					<label class="toggle"><input type="checkbox" id="opt-bloom" checked /> Bloom &amp; glow</label>
+					<label class="toggle"><input type="checkbox" id="opt-audio" checked /> Audio</label>
+					<label class="toggle"><input type="checkbox" id="opt-invert" /> Invert Y</label>
+					<label class="slider">Mouse sensitivity <input type="range" id="opt-sens" min="20" max="300" value="100" /></label>
+				</div>
+			</div>
+
+			<div id="gameover" class="screen hidden">
+				<div class="t-inner">
+					<h2 id="go-title">DOWN BUT NOT OUT</h2>
+					<div class="go-stats">
+						<div><span>SCORE</span><b id="go-score">0</b></div>
+						<div><span>WAVE</span><b id="go-wave">1</b></div>
+						<div><span>TAKEDOWNS</span><b id="go-kills">0</b></div>
+						<div><span>BEST COMBO</span><b id="go-combo">x1</b></div>
+					</div>
+					<div id="go-rank">ROOKIE</div>
+					<button id="btn-again">FLY AGAIN</button>
+				</div>
+			</div>
+
+			<div id="loading" class="screen">
+				<div class="t-inner"><div class="spinner"></div><p>CHARGING NECTAR CORE…</p></div>
+			</div>
+		</div>
+
+		<script type="module" src="./src/main.js"></script>
+	</body>
+</html>
