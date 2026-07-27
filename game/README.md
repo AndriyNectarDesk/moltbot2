@@ -91,11 +91,31 @@ the void.
 | `src/input.js` | Keyboard, mouse, pointer lock |
 | `vendor/` | three.js r185 + the postprocessing addons, vendored (MIT) |
 
+## Performance
+
+Graphics quality is adaptive. The game picks a starting tier from your screen
+size and hardware, then watches the real frame time: if it stays below ~45fps
+for more than a second it drops a tier, and it only climbs back after a
+sustained stretch above ~87fps. A brief `GRAPHICS → LOW` banner tells you when
+it moves, so a sudden visual change is never a mystery.
+
+Live FPS and the current tier are shown in the bottom-left corner.
+
+| Tier | Pixel ratio | Bloom | Shadows | Particles | Decor |
+| --- | --- | --- | --- | --- | --- |
+| **High** | up to 1.35× | yes | yes (1024) | 100% | all |
+| **Medium** | 1× | yes | no | 75% | all |
+| **Low** | 0.85× | no | no | 45% | no clouds |
+| **Potato** | 0.6× | no | no | 25% | minimal |
+
+Override it any time from the pause menu (`ESC` → Graphics); picking a tier by
+hand turns auto-scaling off. Bloom is by far the most expensive single effect,
+so `Medium` → `Low` is the biggest jump.
+
 ## Options
 
-The pause menu toggles screen shake, bloom, audio, invert-Y and mouse
-sensitivity. If the frame rate is low on an older machine, turning **bloom** off
-is the biggest single win.
+The pause menu also toggles screen shake, bloom, audio, invert-Y, the FPS
+readout and mouse sensitivity.
 
 ## Tinkering
 

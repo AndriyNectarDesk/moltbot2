@@ -14,6 +14,7 @@ import { FX } from "./fx.js"
 import { Hero } from "./hero.js"
 import { Projectiles, Pickups } from "./projectiles.js"
 import { HUD } from "./hud.js"
+import { Quality, PRESETS } from "./quality.js"
 import { Brute, Lancer, MoltbotPrime, Skitter, Zipper } from "./enemies.js"
 
 const $ = (id) => document.getElementById(id)
@@ -68,6 +69,11 @@ class Game {
 		this._v2 = new THREE.Vector3()
 		this._shakeOff = new THREE.Vector3()
 
+		this.quality = new Quality(this)
+		this.quality.tier = this.quality.detectInitialTier()
+		this.quality.onChange = (tier, fromAuto) => this._onQualityChange(tier, fromAuto)
+		this.quality.apply()
+
 		this.resetRun()
 		this._bindUI()
 		addEventListener("resize", () => this._resize())
@@ -86,9 +92,11 @@ class Game {
 			antialias: false,
 			powerPreference: "high-performance",
 		})
-		renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
-		renderer.shadowMap.enabled = true
-		renderer.shadowMap.type = THREE.PCFSoftShadowMap
+		// Pixel ratio and shadows are owned by the Quality tier (see quality.js);
+		// these are just safe starting values.
+		renderer.setPixelRatio(1)
+		renderer.shadowMap.enabled = false
+		renderer.shadowMap.type = THREE.PCFShadowMap
 		renderer.toneMapping = THREE.ACESFilmicToneMapping
 		renderer.toneMappingExposure = 0.86
 		this.renderer = renderer
@@ -100,11 +108,17 @@ class Game {
 		const size = renderer.getDrawingBufferSize(new THREE.Vector2())
 		const rt = new THREE.WebGLRenderTarget(size.x, size.y, {
 			type: THREE.HalfFloatType,
-			samples: 4,
+			samples: 0,
 		})
 		this.composer = new EffectComposer(renderer, rt)
 		this.composer.addPass(new RenderPass(this.scene, this.camera))
-		this.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.62, 0.62, 0.92)
+		// Bloom runs at half resolution — it is a blur, so nobody can tell.
+		this.bloom = new UnrealBloomPass(
+			new THREE.Vector2(innerWidth * 0.5, innerHeight * 0.5),
+			0.62,
+			0.62,
+			0.92,
+		)
 		this.composer.addPass(this.bloom)
 		this.composer.addPass(new OutputPass())
 	}
@@ -116,7 +130,8 @@ class Game {
 		this.camera.updateProjectionMatrix()
 		this.renderer.setSize(w, h)
 		this.composer.setSize(w, h)
-		this.bloom.setSize(w, h)
+		const bs = this.quality ? this.quality.preset.bloomScale : 0.5
+		this.bloom.setSize(Math.max(64, w * bs), Math.max(64, h * bs))
 	}
 
 	_bindUI() {
@@ -133,7 +148,26 @@ class Game {
 			}
 		}
 		opt("opt-shake", "shake")
-		opt("opt-bloom", "bloom", (v) => (this.bloom.enabled = v))
+		opt("opt-bloom", "bloom", (v) => {
+			this.bloom.enabled = v && this.quality.preset.bloom
+		})
+
+		const qsel = $("opt-quality")
+		if (qsel) {
+			qsel.value = "auto"
+			qsel.onchange = () => {
+				if (qsel.value === "auto") {
+					this.quality.setAuto(true)
+				} else {
+					this.quality.setAuto(false)
+					this.quality.set(qsel.value)
+				}
+			}
+		}
+		const fpsToggle = $("opt-fps")
+		if (fpsToggle) {
+			fpsToggle.onchange = () => $("perf").classList.toggle("hidden", !fpsToggle.checked)
+		}
 		opt("opt-audio", "audio", (v) => this.audio.setEnabled(v))
 		opt("opt-invert", "invertY", (v) => (this.input.invertY = v))
 		opt("opt-sens", "sens", (v) => (this.input.sensitivity = v / 100))
@@ -141,6 +175,17 @@ class Game {
 		this.input.onLockChange = (locked) => {
 			document.body.classList.toggle("playing", locked)
 			if (!locked && this.state === "playing") this.pause()
+		}
+	}
+
+	_onQualityChange(tier, fromAuto) {
+		const label = PRESETS[tier].label
+		$("perf-tier").textContent = label
+		const sel = $("opt-quality")
+		if (sel && !this.quality.auto) sel.value = tier
+		if (fromAuto && this.state === "playing") {
+			// Say it once so a sudden visual downgrade isn't mysterious.
+			this.hud.banner("", `GRAPHICS → ${label}`)
 		}
 	}
 
@@ -655,6 +700,11 @@ class Game {
 		this.hud.update(realDt, this.camera)
 
 		this.composer.render()
+		this.quality.sample()
+		if (this._perfT === undefined || this.time - this._perfT > 0.25) {
+			this._perfT = this.time
+			$("perf-fps").textContent = this.quality.fps
+		}
 		this.input.endFrame()
 	}
 

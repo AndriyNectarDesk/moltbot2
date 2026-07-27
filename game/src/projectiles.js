@@ -6,29 +6,53 @@ import { rand } from "./util.js"
 const _v = new THREE.Vector3()
 const _v2 = new THREE.Vector3()
 
+// A bolt used to be a Group holding a solid core mesh plus a bigger additive
+// glow mesh — three scene objects each, and with both pools that was over half
+// of everything in the scene getting walked every frame. It is now a single
+// mesh whose shader draws the hot core and the falloff in one pass.
+const BOLT_VERT = /* glsl */ `
+	varying vec3 vN;
+	varying vec3 vV;
+	void main() {
+		vec4 mv = modelViewMatrix * vec4(position, 1.0);
+		vN = normalMatrix * normal;
+		vV = -mv.xyz;
+		gl_Position = projectionMatrix * mv;
+	}
+`
+const BOLT_FRAG = /* glsl */ `
+	varying vec3 vN;
+	varying vec3 vV;
+	uniform vec3 uColor;
+	void main() {
+		float d = abs(dot(normalize(vN), normalize(vV)));
+		float glow = pow(d, 2.0) * 0.55;          // soft halo
+		float core = smoothstep(0.72, 1.0, d);     // white-hot centre
+		vec3 col = uColor * glow + vec3(core);
+		gl_FragColor = vec4(col, clamp(glow + core, 0.0, 1.0));
+	}
+`
+
 class BoltPool {
 	constructor(scene, count, color, radius, glowScale = 3.4) {
 		this.items = []
-		const core = new THREE.SphereGeometry(radius, 10, 8)
-		const glow = new THREE.SphereGeometry(radius * glowScale, 10, 8)
-		const coreMat = new THREE.MeshBasicMaterial({ color: 0xffffff })
-		const glowMat = new THREE.MeshBasicMaterial({
-			color,
+		// one geometry + one material shared by the whole pool
+		const geo = new THREE.SphereGeometry(radius * glowScale, 8, 6)
+		const mat = new THREE.ShaderMaterial({
 			transparent: true,
-			opacity: 0.42,
-			blending: THREE.AdditiveBlending,
 			depthWrite: false,
+			blending: THREE.AdditiveBlending,
+			vertexShader: BOLT_VERT,
+			fragmentShader: BOLT_FRAG,
+			uniforms: { uColor: { value: new THREE.Color(color) } },
 		})
 		for (let i = 0; i < count; i++) {
-			const g = new THREE.Group()
-			const c = new THREE.Mesh(core, coreMat)
-			const gl = new THREE.Mesh(glow, glowMat)
-			g.add(c, gl)
-			g.visible = false
-			scene.add(g)
+			const m = new THREE.Mesh(geo, mat)
+			m.visible = false
+			m.frustumCulled = false
+			scene.add(m)
 			this.items.push({
-				mesh: g,
-				glow: gl,
+				mesh: m,
 				vel: new THREE.Vector3(),
 				alive: false,
 				life: 0,
@@ -59,8 +83,8 @@ export class Projectiles {
 		this.scene = scene
 		this.world = world
 		this.fx = fx
-		this.player = new BoltPool(scene, 90, 0x62e8ff, 0.13, 3.6)
-		this.enemy = new BoltPool(scene, 140, 0xff3aa0, 0.19, 3.0)
+		this.player = new BoltPool(scene, 64, 0x62e8ff, 0.13, 3.6)
+		this.enemy = new BoltPool(scene, 96, 0xff3aa0, 0.19, 3.0)
 	}
 
 	firePlayer(origin, dir, { speed = 88, damage = 14, life = 2.2 } = {}) {
@@ -133,7 +157,6 @@ export class Projectiles {
 				}
 			}
 
-			b.glow.scale.setScalar(1 + Math.sin(ctx.time * 40) * 0.12)
 			if (hitSomething || b.life <= 0) {
 				b.alive = false
 				b.mesh.visible = false

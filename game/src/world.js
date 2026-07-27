@@ -160,6 +160,7 @@ export class World {
 		this.colliders = [] // {type:'box'|'cyl', ...}
 		this.hitMeshes = [] // things the aim ray can land on
 		this.animated = []
+		this.decor = [] // optional eye-candy, hidden on low tiers
 		this.radius = 58 // soft arena boundary
 		this.padTop = 0 // y of the main landing pad
 		this.time = 0
@@ -437,6 +438,7 @@ export class World {
 			arch.position.set(Math.cos(a) * 40, 0, Math.sin(a) * 40)
 			arch.rotation.y = -a + Math.PI / 2
 			this.scene.add(arch)
+			this.decor.push(arch)
 			this.animated.push({ obj: arch, kind: "pulse", base: 1, phase: i * 0.8 })
 		}
 
@@ -457,6 +459,7 @@ export class World {
 			ring.rotation.x = Math.PI / 2 + rand(-0.22, 0.22)
 			ring.userData.spin = (i % 2 ? 1 : -1) * rand(0.05, 0.14)
 			this.rings.push(ring)
+			this.decor.push(ring)
 			this.scene.add(ring)
 		}
 
@@ -470,12 +473,14 @@ export class World {
 			)
 			spire.position.set(Math.cos(a) * r, 7, Math.sin(a) * r)
 			this.scene.add(spire)
+			this.decor.push(spire)
 			const beacon = new THREE.Mesh(
 				new THREE.SphereGeometry(0.4, 8, 8),
 				new THREE.MeshBasicMaterial({ color: MAGENTA }),
 			)
 			beacon.position.set(Math.cos(a) * r, 14.4, Math.sin(a) * r)
 			this.scene.add(beacon)
+			this.decor.push(beacon)
 			this.animated.push({ obj: beacon, kind: "blink", phase: i * 0.7 })
 		}
 
@@ -494,6 +499,7 @@ export class World {
 			b.position.set(Math.cos(a) * rand(52, 74), rand(6, 30), Math.sin(a) * rand(52, 74))
 			b.lookAt(0, b.position.y, 0)
 			this.scene.add(b)
+			this.decor.push(b)
 			this.animated.push({ obj: b, kind: "flicker", base: 0.16, phase: i * 1.7 })
 		}
 	}
@@ -714,9 +720,24 @@ export class World {
 		}
 	}
 
-	/** Keep the world lively but cheap while the game is paused/at menu. */
-	setQuality(high) {
-		if (this.keyLight) this.keyLight.castShadow = high
+	/** Toggle sun shadows and their resolution. */
+	setShadows(on, size = 1024) {
+		if (!this.keyLight) return
+		this.keyLight.castShadow = on
+		const shadow = this.keyLight.shadow
+		if (on && shadow.mapSize.width !== size) {
+			shadow.mapSize.set(size, size)
+			// force three to rebuild the shadow target at the new size
+			shadow.map?.dispose()
+			shadow.map = null
+		}
+	}
+
+	/** Hide the purely decorative layers on low quality tiers. */
+	setDecor(deco, clouds, shield) {
+		for (const d of this.decor) d.visible = deco
+		for (const c of this.clouds) c.visible = clouds
+		if (this.shield) this.shield.visible = shield
 	}
 }
 
