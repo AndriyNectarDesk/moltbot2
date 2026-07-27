@@ -143,6 +143,7 @@
 						<div><b>FIRE</b> auto-fires at targets</div>
 						<div><b>FLY</b> tap to jump, hold to fly</div>
 					</div>
+					<div id="title-board" class="board board-compact"></div>
 					<div class="t-foot">
 						Graphics auto-tune to your device — change them any time from the
 						pause button.
@@ -184,6 +185,18 @@
 						<div><span>BEST COMBO</span><b id="go-combo">x1</b></div>
 					</div>
 					<div id="go-rank">ROOKIE</div>
+
+					<div id="go-submit">
+						<label for="go-name">HERO NAME</label>
+						<div class="name-row">
+							<input id="go-name" maxlength="14" placeholder="DANYLO" autocomplete="off"
+								autocapitalize="characters" spellcheck="false" />
+							<button id="btn-submit" class="small">POST SCORE</button>
+						</div>
+						<div id="go-submit-msg"></div>
+					</div>
+
+					<div id="go-board" class="board"></div>
 					<button id="btn-again">FLY AGAIN</button>
 				</div>
 			</div>

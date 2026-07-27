@@ -113,6 +113,24 @@ the void.
 | `src/input.js` | Keyboard, mouse, pointer lock |
 | `vendor/` | three.js r185 + the postprocessing addons, vendored (MIT) |
 
+## Leaderboard
+
+After each run you can name your hero and post the score. Out of the box the
+board is **stored on this device only** — it works immediately, it just isn't
+shared. To make it shared across everyone's phones and laptops, deploy the
+Cloudflare Worker in [`../leaderboard`](../leaderboard) (about two minutes, free
+tier) and paste its URL into [`config.js`](./config.js).
+
+Once shared, one row per name: re-posting only replaces your row if you beat
+your own score, so the table shows who is best rather than who played most.
+
+Worth knowing: **scores can't be verified.** The game runs in the player's own
+browser, so anyone who opens the devtools console can post any number. The
+worker rejects obvious nonsense and rate-limits submissions, but for a genuinely
+cheat-proof board the game would have to be simulated server-side. Among friends
+this is usually the right trade — just don't take a suspiciously round number
+too seriously.
+
 ## Performance
 
 Graphics quality is adaptive. The game picks a starting tier from your screen

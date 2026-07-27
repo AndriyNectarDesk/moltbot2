@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nectar-nova-scores",
+  "main": "worker.js",
+  "compatibility_date": "2025-05-06",
+  "observability": { "enabled": true },
+
+  // Created by: npx wrangler kv namespace create SCORES
+  // Paste the id it prints below.
+  "kv_namespaces": [
+    {
+      "binding": "SCORES",
+      "id": "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+    }
+  ]
+
+  // Optional: restrict who may call the API. Without this any site can.
+  // "vars": { "ALLOWED_ORIGINS": "https://andriynectardesk.github.io" }
+}
