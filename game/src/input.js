@@ -3,6 +3,7 @@
 export class Input {
 	constructor(canvas) {
 		this.canvas = canvas
+		this.touch = null // set by TouchControls when present
 		this.keys = new Set()
 		this.pressed = new Set() // consumed once per frame
 		this.mouse = { dx: 0, dy: 0, left: false, right: false, leftPressed: false, rightPressed: false, rightReleased: false }
@@ -59,10 +60,22 @@ export class Input {
 	}
 
 	requestLock() {
+		// Touch devices drive the camera by dragging, so there is nothing to lock.
+		if (this.touch?.enabled) {
+			this.locked = true
+			this.onLockChange?.(true)
+			return
+		}
 		if (!this.locked) this.canvas.requestPointerLock?.()
 	}
 
 	exitLock() {
+		if (this.touch?.enabled) {
+			this.locked = false
+			this.touch.releaseAll()
+			this.onLockChange?.(false)
+			return
+		}
 		if (this.locked) document.exitPointerLock?.()
 	}
 
@@ -81,6 +94,8 @@ export class Input {
 
 	/** Movement axes in local space: x = strafe (+right), y = forward (+fwd). */
 	axes() {
+		const stick = this.touch?.axes()
+		if (stick) return stick
 		let x = 0
 		let y = 0
 		if (this.down("KeyW") || this.down("ArrowUp")) y += 1

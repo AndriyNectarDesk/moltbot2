@@ -737,7 +737,7 @@ export class Hero {
 
 	_updateWeapons(dt, input, ctx) {
 		// primary — alternating palm bolts
-		if (input.mouse.left && this.fireCd <= 0 && !this.charging) {
+		if (ctx.firing && this.fireCd <= 0 && !this.charging) {
 			this.fireCd = 0.11
 			this.handSide = -this.handSide
 			const origin = this.handWorld(new THREE.Vector3())
@@ -855,7 +855,7 @@ export class Hero {
 
 		// arms
 		const shootingBlend = clamp(
-			(ctx.input.mouse.left ? 1 : 0) + (this.charging ? 1 : 0) + this.recoil,
+			(ctx.firing ? 1 : 0) + (this.charging ? 1 : 0) + this.recoil,
 			0,
 			1,
 		)

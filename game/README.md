@@ -19,8 +19,8 @@ server works just as well, e.g. `python3 -m http.server 5180` from this folder.
 It has to be served over `http://` — ES modules and importmaps don't load from
 `file://`.
 
-Needs a desktop browser with WebGL2 and a mouse. Click **LAUNCH**, then the game
-takes pointer lock.
+Needs WebGL2. On desktop, click **LAUNCH** and the game takes pointer lock; on a
+phone or tablet it switches to touch controls automatically.
 
 ## Share it
 
@@ -45,6 +45,28 @@ Either way, the only thing to update afterwards is the `og:image` URL in
 show a screenshot.
 
 ## Controls
+
+### Touch
+
+Detected automatically on any coarse-pointer device — no pointer lock, on-screen
+controls instead, and the game asks you to rotate to landscape if you're in
+portrait.
+
+| Input | Action |
+| --- | --- |
+| Left thumb, anywhere on the left half | Virtual stick — it appears where you press |
+| Right thumb, drag | Aim / swing the camera |
+| **FIRE** | Plasma. **Auto-fire is on by default** on touch, so holding the reticle near a target is enough — aiming precisely with a thumb isn't realistic |
+| **BEAM** | Hold to charge, release to fire |
+| **FLY** | Tap to jump, tap again to double-jump, hold to fly |
+| **DASH** / **NOVA** | Super dash · the ultimate |
+| **II** (top right) | Pause |
+
+Touch devices start on a low graphics tier and climb only if there's headroom —
+guessing high on a phone means the first few seconds are a slideshow. Auto-fire
+can be turned off in the pause menu.
+
+### Keyboard &amp; mouse
 
 | Input | Action |
 | --- | --- |
