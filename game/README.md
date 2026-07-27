@@ -22,6 +22,28 @@ It has to be served over `http://` — ES modules and importmaps don't load from
 Needs a desktop browser with WebGL2 and a mouse. Click **LAUNCH**, then the game
 takes pointer lock.
 
+## Share it
+
+The game is static files, so it hosts anywhere. This repo ships a GitHub Pages
+workflow (`.github/workflows/deploy-game.yml`): once `game/` lands on `main`, the
+workflow enables Pages and publishes to
+
+**https://andriynectardesk.github.io/moltbot2/**
+
+Re-deploys happen automatically on any push to `main` that touches `game/`, and
+you can also trigger it by hand from the repo's **Actions** tab
+(*Deploy game to GitHub Pages* → *Run workflow*).
+
+Prefer Cloudflare (custom domain, no repo coupling)? One command, no config:
+
+```bash
+npx wrangler pages deploy game --project-name danylo-nectar-nova
+```
+
+Either way, the only thing to update afterwards is the `og:image` URL in
+`index.html`, which points at the Pages copy of `preview.png` so shared links
+show a screenshot.
+
 ## Controls
 
 | Input | Action |
