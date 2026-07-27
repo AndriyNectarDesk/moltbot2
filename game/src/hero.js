@@ -271,9 +271,10 @@ export class Hero {
 		this.suitMat = suitMat
 		this.materials = [suitMat, suitDark, whiteMat]
 
+		// Only the big silhouette pieces cast; spikes, gloves and pads add ~30
+		// shadow-pass draw calls for a difference nobody can see.
 		const cast = (m) => {
 			m.castShadow = true
-			m.receiveShadow = true
 			return m
 		}
 
@@ -409,7 +410,6 @@ export class Hero {
 			const az = rand(-0.24, 0.2)
 			spike.position.set(ax, 0.6 + rand(0, 0.05), az)
 			spike.rotation.set(0.25 + az * 1.6 + rand(-0.3, 0.3), rand(0, TAU), rand(-0.45, 0.45) - ax * 1.9)
-			spike.castShadow = true
 			spike.userData.base = spike.rotation.clone()
 			neck.add(spike)
 			this.hairSpikes.push(spike)
@@ -475,7 +475,6 @@ export class Hero {
 			emissiveIntensity: 0.6,
 		})
 		const cape = new THREE.Mesh(capeGeo, capeMat)
-		cape.castShadow = true
 		cape.position.set(0, 0.03, -0.25)
 		capeGeo.translate(0, -this.capeHalf, 0)
 		const capeAnchor = new THREE.Group()

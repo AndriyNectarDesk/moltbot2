@@ -429,7 +429,6 @@ body {
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	backdrop-filter: blur(3px);
 }
 
 .ab b {
@@ -638,6 +637,39 @@ body {
 	color: #6dffa8;
 }
 
+#perf {
+	position: absolute;
+	left: 22px;
+	bottom: 16px;
+	font-size: 11px;
+	letter-spacing: 2px;
+	color: rgba(255, 255, 255, 0.4);
+	font-variant-numeric: tabular-nums;
+}
+
+#perf b {
+	color: var(--cyan);
+	font-size: 13px;
+}
+
+#perf span {
+	color: rgba(255, 255, 255, 0.3);
+	margin-left: 4px;
+}
+
+.slider select {
+	font-family: inherit;
+	font-size: 12px;
+	letter-spacing: 2px;
+	margin-left: 10px;
+	padding: 4px 8px;
+	background: rgba(10, 6, 22, 0.9);
+	color: var(--cyan);
+	border: 1px solid rgba(255, 255, 255, 0.25);
+	border-radius: 3px;
+	cursor: pointer;
+}
+
 #low-health-warn {
 	position: absolute;
 	left: 50%;
@@ -672,8 +704,7 @@ body {
 	justify-content: center;
 	background:
 		radial-gradient(ellipse at 50% 30%, rgba(80, 20, 120, 0.55), transparent 60%),
-		linear-gradient(180deg, rgba(4, 2, 12, 0.86), rgba(4, 2, 12, 0.96));
-	backdrop-filter: blur(6px);
+		linear-gradient(180deg, rgba(4, 2, 12, 0.93), rgba(4, 2, 12, 0.98));
 	text-align: center;
 }
 

@@ -22,6 +22,28 @@ const neon = (color, intensity = 2.4) =>
 		metalness: 0.2,
 	})
 
+// ---------------------------------------------------------------- caches
+// Enemies used to build fresh geometry for every limb on every spawn, which
+// meant a burst of GPU buffer uploads mid-frame each time a wave landed — the
+// stutter you feel as the wave starts. Shapes are immutable here, so they are
+// built once and shared. (Materials stay per-instance: hit flashes mutate them.)
+const _geoCache = new Map()
+function G(Ctor, ...args) {
+	const key = Ctor.name + ":" + args.join(",")
+	let g = _geoCache.get(key)
+	if (!g) {
+		g = new Ctor(...args)
+		_geoCache.set(key, g)
+	}
+	return g
+}
+
+// The Lancer's telegraph beam is the one mutated geometry, so it is hoisted
+// here and built exactly once rather than shared through G().
+const LASER_GEO = new THREE.CylinderGeometry(1, 1, 1, 8, 1, true)
+LASER_GEO.translate(0, 0.5, 0)
+LASER_GEO.rotateX(Math.PI / 2)
+
 // ---------------------------------------------------------------- base
 export class Enemy {
 	constructor(game, pos) {
@@ -76,8 +98,10 @@ export class Enemy {
 	remove() {
 		this.alive = false
 		this.scene.remove(this.group)
+		// Geometry is shared via G() and materials are cheap, so there is
+		// nothing to dispose here — doing so would corrupt other enemies.
 		this.group.traverse((o) => {
-			if (o.geometry) o.geometry.dispose?.()
+			if (o.material && o.material.dispose && !Array.isArray(o.material)) o.material.dispose()
 		})
 	}
 
@@ -167,18 +191,18 @@ export class Skitter extends Enemy {
 		this.height = rand(2.5, 7)
 		this.pos.y = game.world.padTop + this.height
 
-		const body = new THREE.Mesh(new THREE.OctahedronGeometry(0.62, 0), this.track(shell(0x33184f)))
+		const body = new THREE.Mesh(G(THREE.OctahedronGeometry, 0.62, 0), this.track(shell(0x33184f)))
 		body.castShadow = true
 		this.group.add(body)
 		this.body = body
 
-		const eye = new THREE.Mesh(new THREE.SphereGeometry(0.27, 12, 10), this.track(neon(MAG, 3)))
+		const eye = new THREE.Mesh(G(THREE.SphereGeometry, 0.27, 12, 10), this.track(neon(MAG, 3)))
 		eye.position.z = 0.5
 		this.group.add(eye)
 		this.eye = eye
 
 		const halo = new THREE.Mesh(
-			new THREE.SphereGeometry(0.85, 10, 8),
+			G(THREE.SphereGeometry, 0.85, 10, 8),
 			new THREE.MeshBasicMaterial({
 				color: MAG,
 				transparent: true,
@@ -191,14 +215,14 @@ export class Skitter extends Enemy {
 
 		this.fins = []
 		for (let i = 0; i < 3; i++) {
-			const fin = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.5, 1.05), this.track(shell(0x4a2470)))
+			const fin = new THREE.Mesh(G(THREE.BoxGeometry, 0.12, 0.5, 1.05), this.track(shell(0x4a2470)))
 			fin.position.y = 0.1
 			fin.rotation.y = (i / 3) * TAU
 			fin.castShadow = true
 			this.group.add(fin)
 			this.fins.push(fin)
 		}
-		const ring = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.05, 6, 24), this.track(neon(VIO, 2)))
+		const ring = new THREE.Mesh(G(THREE.TorusGeometry, 0.95, 0.05, 6, 24), this.track(neon(VIO, 2)))
 		ring.rotation.x = Math.PI / 2
 		this.group.add(ring)
 		this.ring = ring
@@ -271,33 +295,32 @@ export class Brute extends Enemy {
 		this.windup = 0
 		this.step = rand(0, 6)
 
-		const torso = new THREE.Mesh(new THREE.BoxGeometry(1.7, 1.5, 1.2), this.track(shell(0x2b1548)))
+		const torso = new THREE.Mesh(G(THREE.BoxGeometry, 1.7, 1.5, 1.2), this.track(shell(0x2b1548)))
 		torso.position.y = 2.3
 		torso.castShadow = true
 		this.group.add(torso)
 		this.torso = torso
 
-		const visor = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.26, 0.1), this.track(neon(MAG, 3)))
+		const visor = new THREE.Mesh(G(THREE.BoxGeometry, 1.1, 0.26, 0.1), this.track(neon(MAG, 3)))
 		visor.position.set(0, 2.65, 0.62)
 		this.group.add(visor)
 		this.visor = visor
 
-		const core = new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 10), this.track(neon(CY, 3.2)))
+		const core = new THREE.Mesh(G(THREE.SphereGeometry, 0.34, 12, 10), this.track(neon(CY, 3.2)))
 		core.position.set(0, 2.15, 0.6)
 		this.group.add(core)
 		this.weakPoint = core
 		this.weakRadius = 0.8
 
 		for (const s of [-1, 1]) {
-			const pauldron = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.6, 1.0), this.track(shell(0x431f66)))
+			const pauldron = new THREE.Mesh(G(THREE.BoxGeometry, 0.55, 0.6, 1.0), this.track(shell(0x431f66)))
 			pauldron.position.set(s * 1.1, 2.7, 0)
-			pauldron.castShadow = true
 			this.group.add(pauldron)
-			const gun = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 1.1, 8), this.track(shell(0x1c1030)))
+			const gun = new THREE.Mesh(G(THREE.CylinderGeometry, 0.14, 0.18, 1.1, 8), this.track(shell(0x1c1030)))
 			gun.rotation.x = Math.PI / 2
 			gun.position.set(s * 1.1, 2.6, 0.7)
 			this.group.add(gun)
-			const tip = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 8), this.track(neon(MAG, 2)))
+			const tip = new THREE.Mesh(G(THREE.SphereGeometry, 0.13, 8, 8), this.track(neon(MAG, 2)))
 			tip.position.set(s * 1.1, 2.6, 1.25)
 			this.group.add(tip)
 		}
@@ -307,17 +330,16 @@ export class Brute extends Enemy {
 			const hip = new THREE.Group()
 			hip.position.set(s * 0.45, 1.6, 0)
 			this.group.add(hip)
-			const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.9, 0.4), this.track(shell(0x391c56)))
+			const thigh = new THREE.Mesh(G(THREE.BoxGeometry, 0.36, 0.9, 0.4), this.track(shell(0x391c56)))
 			thigh.position.y = -0.45
-			thigh.castShadow = true
 			hip.add(thigh)
 			const knee = new THREE.Group()
 			knee.position.y = -0.9
 			hip.add(knee)
-			const shin = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.8, 0.34), this.track(shell(0x23133b)))
+			const shin = new THREE.Mesh(G(THREE.BoxGeometry, 0.3, 0.8, 0.34), this.track(shell(0x23133b)))
 			shin.position.y = -0.4
 			knee.add(shin)
-			const foot = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.2, 0.75), this.track(shell(0x150c25)))
+			const foot = new THREE.Mesh(G(THREE.BoxGeometry, 0.45, 0.2, 0.75), this.track(shell(0x150c25)))
 			foot.position.set(0, -0.82, 0.15)
 			knee.add(foot)
 			this.legs.push({ hip, knee, s })
@@ -445,12 +467,12 @@ export class Lancer extends Enemy {
 		this.height = rand(6, 13)
 		this.pos.y = game.world.padTop + this.height
 
-		const hull = new THREE.Mesh(new THREE.ConeGeometry(0.5, 2.4, 6), this.track(shell(0x1f1238)))
+		const hull = new THREE.Mesh(G(THREE.ConeGeometry, 0.5, 2.4, 6), this.track(shell(0x1f1238)))
 		hull.rotation.x = Math.PI / 2
 		hull.castShadow = true
 		this.group.add(hull)
 
-		const lens = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 10), this.track(neon(0xff6a00, 2.4)))
+		const lens = new THREE.Mesh(G(THREE.SphereGeometry, 0.3, 12, 10), this.track(neon(0xff6a00, 2.4)))
 		lens.position.z = 1.2
 		this.group.add(lens)
 		this.lens = lens
@@ -458,22 +480,18 @@ export class Lancer extends Enemy {
 		this.weakRadius = 0.7
 
 		for (const s of [-1, 1]) {
-			const wing = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.08, 0.5), this.track(shell(0x3a1e5c)))
+			const wing = new THREE.Mesh(G(THREE.BoxGeometry, 1.5, 0.08, 0.5), this.track(shell(0x3a1e5c)))
 			wing.position.set(s * 0.85, 0, -0.3)
 			wing.rotation.z = s * 0.28
-			wing.castShadow = true
 			this.group.add(wing)
-			const led = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), this.track(neon(CY, 2)))
+			const led = new THREE.Mesh(G(THREE.SphereGeometry, 0.1, 8, 8), this.track(neon(CY, 2)))
 			led.position.set(s * 1.5, 0, -0.3)
 			this.group.add(led)
 		}
 
 		// telegraph line drawn before the shot lands
-		const g = new THREE.CylinderGeometry(1, 1, 1, 8, 1, true)
-		g.translate(0, 0.5, 0)
-		g.rotateX(Math.PI / 2)
 		this.laser = new THREE.Mesh(
-			g,
+			LASER_GEO,
 			new THREE.MeshBasicMaterial({
 				color: 0xff3a3a,
 				transparent: true,
@@ -578,11 +596,11 @@ export class Zipper extends Enemy {
 		this.score = 90
 		this.armT = rand(0.2, 0.7)
 
-		const b = new THREE.Mesh(new THREE.TetrahedronGeometry(0.55, 0), this.track(neon(0xff5ab0, 1.6)))
+		const b = new THREE.Mesh(G(THREE.TetrahedronGeometry, 0.55, 0), this.track(neon(0xff5ab0, 1.6)))
 		b.castShadow = true
 		this.group.add(b)
 		this.b = b
-		const spike = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.7, 5), this.track(neon(0xfff0a0, 2)))
+		const spike = new THREE.Mesh(G(THREE.ConeGeometry, 0.16, 0.7, 5), this.track(neon(0xfff0a0, 2)))
 		spike.rotation.x = Math.PI / 2
 		spike.position.z = 0.55
 		this.group.add(spike)
@@ -639,17 +657,17 @@ export class MoltbotPrime extends Enemy {
 		this.pos.y = game.world.padTop + 7
 
 		const dark = 0x1b1030
-		const body = new THREE.Mesh(new THREE.BoxGeometry(4.2, 3.6, 3), this.track(shell(dark)))
+		const body = new THREE.Mesh(G(THREE.BoxGeometry, 4.2, 3.6, 3), this.track(shell(dark)))
 		body.castShadow = true
 		this.group.add(body)
 		this.torso = body
 
-		const chestPlate = new THREE.Mesh(new THREE.BoxGeometry(3, 1.6, 0.4), this.track(shell(0x40206b)))
+		const chestPlate = new THREE.Mesh(G(THREE.BoxGeometry, 3, 1.6, 0.4), this.track(shell(0x40206b)))
 		chestPlate.position.set(0, 0.6, 1.5)
 		this.group.add(chestPlate)
 
 		// exposed core — the weak point
-		const core = new THREE.Mesh(new THREE.IcosahedronGeometry(0.85, 1), this.track(neon(CY, 1.9)))
+		const core = new THREE.Mesh(G(THREE.IcosahedronGeometry, 0.85, 1), this.track(neon(CY, 1.9)))
 		core.position.set(0, -0.4, 1.6)
 		this.group.add(core)
 		this.weakPoint = core
@@ -657,7 +675,7 @@ export class MoltbotPrime extends Enemy {
 		this.core = core
 
 		const coreHalo = new THREE.Mesh(
-			new THREE.SphereGeometry(1.5, 14, 12),
+			G(THREE.SphereGeometry, 1.5, 14, 12),
 			new THREE.MeshBasicMaterial({
 				color: CY,
 				transparent: true,
@@ -669,16 +687,16 @@ export class MoltbotPrime extends Enemy {
 		core.add(coreHalo)
 
 		// head
-		const head = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.1, 1.6), this.track(shell(0x2a1748)))
+		const head = new THREE.Mesh(G(THREE.BoxGeometry, 1.8, 1.1, 1.6), this.track(shell(0x2a1748)))
 		head.position.y = 2.4
 		head.castShadow = true
 		this.group.add(head)
-		const eye = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.3, 0.12), this.track(neon(MAG, 3.4)))
+		const eye = new THREE.Mesh(G(THREE.BoxGeometry, 1.3, 0.3, 0.12), this.track(neon(MAG, 3.4)))
 		eye.position.set(0, 2.5, 0.84)
 		this.group.add(eye)
 		this.eye = eye
 		for (const s of [-1, 1]) {
-			const horn = new THREE.Mesh(new THREE.ConeGeometry(0.16, 1.1, 5), this.track(shell(0x522a80)))
+			const horn = new THREE.Mesh(G(THREE.ConeGeometry, 0.16, 1.1, 5), this.track(shell(0x522a80)))
 			horn.position.set(s * 0.7, 3.2, 0)
 			horn.rotation.z = s * 0.4
 			this.group.add(horn)
@@ -690,18 +708,16 @@ export class MoltbotPrime extends Enemy {
 			const shoulder = new THREE.Group()
 			shoulder.position.set(s * 2.6, 1.2, 0)
 			this.group.add(shoulder)
-			const pad = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 1.6), this.track(shell(0x381c5c)))
-			pad.castShadow = true
+			const pad = new THREE.Mesh(G(THREE.BoxGeometry, 1.2, 1.2, 1.6), this.track(shell(0x381c5c)))
 			shoulder.add(pad)
-			const arm = new THREE.Mesh(new THREE.BoxGeometry(0.8, 2.2, 0.9), this.track(shell(0x241440)))
+			const arm = new THREE.Mesh(G(THREE.BoxGeometry, 0.8, 2.2, 0.9), this.track(shell(0x241440)))
 			arm.position.y = -1.4
-			arm.castShadow = true
 			shoulder.add(arm)
-			const cannon = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.42, 1.8, 10), this.track(shell(0x120a20)))
+			const cannon = new THREE.Mesh(G(THREE.CylinderGeometry, 0.32, 0.42, 1.8, 10), this.track(shell(0x120a20)))
 			cannon.rotation.x = Math.PI / 2
 			cannon.position.set(0, -2.4, 0.8)
 			shoulder.add(cannon)
-			const tip = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 10), this.track(neon(MAG, 2.4)))
+			const tip = new THREE.Mesh(G(THREE.SphereGeometry, 0.3, 10, 10), this.track(neon(MAG, 2.4)))
 			tip.position.set(0, -2.4, 1.7)
 			shoulder.add(tip)
 			this.arms.push({ shoulder, tip, s })
@@ -711,7 +727,7 @@ export class MoltbotPrime extends Enemy {
 		this.orbits = []
 		for (let i = 0; i < 2; i++) {
 			const ring = new THREE.Mesh(
-				new THREE.TorusGeometry(4.4 + i * 0.9, 0.12, 6, 40),
+				G(THREE.TorusGeometry, 4.4 + i * 0.9, 0.12, 6, 40),
 				this.track(neon(i ? VIO : MAG, 1.6)),
 			)
 			ring.rotation.x = Math.PI / 2 + (i ? 0.5 : -0.4)
@@ -723,7 +739,7 @@ export class MoltbotPrime extends Enemy {
 		this.thrusters = []
 		for (const s of [-1, 1]) {
 			const th = new THREE.Mesh(
-				new THREE.ConeGeometry(0.55, 2.4, 10, 1, true),
+				G(THREE.ConeGeometry, 0.55, 2.4, 10, 1, true),
 				new THREE.MeshBasicMaterial({
 					color: 0x9fe9ff,
 					transparent: true,

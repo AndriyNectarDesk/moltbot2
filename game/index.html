@@ -94,6 +94,7 @@
 				<div id="killfeed"></div>
 				<div id="floaters"></div>
 				<div id="low-health-warn" class="hidden">CRITICAL</div>
+				<div id="perf"><b id="perf-fps">60</b> FPS <span id="perf-tier">MEDIUM</span></div>
 			</div>
 
 			<!-- ============ SCREENS ============ -->
@@ -116,7 +117,10 @@
 						<div><b>Q</b> nova blast</div>
 						<div><b>ESC</b> pause &nbsp;•&nbsp; <b>M</b> mute</div>
 					</div>
-					<div class="t-foot">Best on a desktop browser with a mouse.</div>
+					<div class="t-foot">
+						Desktop browser with a mouse. Graphics auto-tune to your machine —
+						change them any time with <b>ESC</b>.
+					</div>
 				</div>
 			</div>
 
@@ -126,6 +130,16 @@
 					<button id="btn-resume">RESUME</button>
 					<button class="ghost" id="btn-quit">ABANDON MISSION</button>
 					<label class="toggle"><input type="checkbox" id="opt-shake" checked /> Screen shake</label>
+					<label class="slider">Graphics
+						<select id="opt-quality">
+							<option value="auto">Auto</option>
+							<option value="high">High</option>
+							<option value="medium">Medium</option>
+							<option value="low">Low</option>
+							<option value="potato">Potato</option>
+						</select>
+					</label>
+					<label class="toggle"><input type="checkbox" id="opt-fps" checked /> Show FPS</label>
 					<label class="toggle"><input type="checkbox" id="opt-bloom" checked /> Bloom &amp; glow</label>
 					<label class="toggle"><input type="checkbox" id="opt-audio" checked /> Audio</label>
 					<label class="toggle"><input type="checkbox" id="opt-invert" /> Invert Y</label>

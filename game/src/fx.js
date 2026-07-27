@@ -4,12 +4,13 @@
 import * as THREE from "three"
 import { clamp, rand, TAU } from "./util.js"
 
-const MAX_PARTICLES = 3000
+const MAX_PARTICLES = 2000
 
 export class FX {
 	constructor(scene) {
 		this.scene = scene
 		this.time = 0
+		this.scale = 1 // particle-count multiplier, set by the quality tier
 		this._v = new THREE.Vector3()
 		this._buildParticles()
 		this._buildRings()
@@ -77,6 +78,16 @@ export class FX {
 		this.points.frustumCulled = false
 		this.scene.add(this.points)
 		this.geo = geo
+	}
+
+	/** Quality tiers thin out particle counts rather than dropping effects. */
+	setScale(s) {
+		this.scale = s
+	}
+
+	/** Scaled emitter count — always emits at least one so nothing vanishes. */
+	n(count) {
+		return Math.max(1, Math.round(count * this.scale))
 	}
 
 	spawn(x, y, z, vx, vy, vz, color, size, life, grav = 0, drag = 1.6) {
@@ -239,7 +250,7 @@ export class FX {
 
 	// ------------------------------------------------------------ recipes
 	muzzle(pos, dir, color = 0xbff4ff) {
-		for (let i = 0; i < 6; i++) {
+		for (let i = 0, c = this.n(6); i < c; i++) {
 			this.spawn(
 				pos.x,
 				pos.y,
@@ -258,7 +269,7 @@ export class FX {
 	}
 
 	impact(pos, normal, color = 0xffc46a, scale = 1) {
-		for (let i = 0; i < 14 * scale; i++) {
+		for (let i = 0, c = this.n(14 * scale); i < c; i++) {
 			this.spawn(
 				pos.x,
 				pos.y,
@@ -277,7 +288,7 @@ export class FX {
 	}
 
 	explosion(pos, color = 0xff7a1a, scale = 1) {
-		for (let i = 0; i < 46 * scale; i++) {
+		for (let i = 0, c = this.n(46 * scale); i < c; i++) {
 			const a = rand(0, TAU)
 			const b = Math.acos(rand(-1, 1))
 			const s = rand(3, 17) * scale
@@ -296,7 +307,7 @@ export class FX {
 			)
 		}
 		// lingering smoke
-		for (let i = 0; i < 14 * scale; i++) {
+		for (let i = 0, c = this.n(14 * scale); i < c; i++) {
 			this.spawn(
 				pos.x + rand(-0.6, 0.6),
 				pos.y + rand(-0.4, 0.8),
@@ -317,7 +328,7 @@ export class FX {
 
 	ringBurst(pos, color = 0x9fe9ff, scale = 1) {
 		this._ring(pos, color, 0.4, 3.2 * scale, 0.45)
-		for (let i = 0; i < 10; i++) {
+		for (let i = 0, c = this.n(10); i < c; i++) {
 			const a = rand(0, TAU)
 			this.spawn(
 				pos.x,
@@ -336,6 +347,7 @@ export class FX {
 	}
 
 	thruster(pos, legs) {
+		if (this.scale < 0.5 && Math.random() > this.scale * 2) return
 		for (const leg of legs) {
 			leg.jet.getWorldPosition(this._v)
 			this.spawn(
@@ -355,7 +367,7 @@ export class FX {
 	}
 
 	dashTrail(pos, dir) {
-		for (let i = 0; i < 26; i++) {
+		for (let i = 0, c = this.n(26); i < c; i++) {
 			this.spawn(
 				pos.x + rand(-0.4, 0.4),
 				pos.y + rand(0.2, 1.8),
@@ -397,7 +409,7 @@ export class FX {
 		this._ring(pos, 0xffd08a, 0.5, 46, 1.15)
 		this._ring(pos, 0x31e6ff, 0.5, 34, 0.95)
 		this._flash(pos, 0xfff4d0, 0.5, 12, 0.5)
-		for (let i = 0; i < 240; i++) {
+		for (let i = 0, c = this.n(240); i < c; i++) {
 			const a = rand(0, TAU)
 			const b = Math.acos(rand(-0.2, 1))
 			const s = rand(14, 44)
