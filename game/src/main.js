@@ -15,6 +15,7 @@ import { Hero } from "./hero.js"
 import { Projectiles, Pickups } from "./projectiles.js"
 import { HUD } from "./hud.js"
 import { Quality, PRESETS } from "./quality.js"
+import { TouchControls } from "./touch.js"
 import { Brute, Lancer, MoltbotPrime, Skitter, Zipper } from "./enemies.js"
 
 const $ = (id) => document.getElementById(id)
@@ -45,6 +46,16 @@ class Game {
 		this._initRenderer()
 		this.audio = new Audio()
 		this.input = new Input(this.canvas)
+		this.touch = new TouchControls(this.input)
+		this.isTouch = TouchControls.isTouchDevice()
+		if (this.isTouch) {
+			this.touch.attach()
+			this.input.touch = this.touch
+		}
+		// Aiming with a thumb is imprecise, so touch players get auto-fire by
+		// default: hold the reticle near a target and Danylo shoots.
+		this.autoFire = this.isTouch
+		this.aimHostile = false
 		this.hud = new HUD()
 
 		this.world = new World(this.scene)
@@ -73,6 +84,9 @@ class Game {
 		this.quality.tier = this.quality.detectInitialTier()
 		this.quality.onChange = (tier, fromAuto) => this._onQualityChange(tier, fromAuto)
 		this.quality.apply()
+		// The starting tier is assigned directly, so sync the readout by hand or
+		// it keeps whatever the markup said.
+		$("perf-tier").textContent = PRESETS[this.quality.tier].label
 
 		this.resetRun()
 		this._bindUI()
@@ -172,6 +186,26 @@ class Game {
 		opt("opt-invert", "invertY", (v) => (this.input.invertY = v))
 		opt("opt-sens", "sens", (v) => (this.input.sensitivity = v / 100))
 
+		const pauseBtn = $("btn-pause")
+		if (pauseBtn) pauseBtn.onclick = () => (this.state === "playing" ? this.pause() : this.resume())
+
+		const af = $("opt-autofire")
+		if (af) {
+			af.checked = this.autoFire
+			af.onchange = () => (this.autoFire = af.checked)
+		}
+
+		// Portrait on a phone leaves no usable view; nag until they rotate.
+		const checkOrientation = () => {
+			if (!this.isTouch) return
+			const portrait = innerHeight > innerWidth
+			$("rotate").classList.toggle("hidden", !portrait)
+			if (portrait && this.state === "playing") this.pause()
+		}
+		addEventListener("resize", checkOrientation)
+		addEventListener("orientationchange", () => setTimeout(checkOrientation, 250))
+		checkOrientation()
+
 		this.input.onLockChange = (locked) => {
 			document.body.classList.toggle("playing", locked)
 			if (!locked && this.state === "playing") this.pause()
@@ -218,6 +252,10 @@ class Game {
 	}
 
 	start() {
+		if (this.isTouch) {
+			document.documentElement.requestFullscreen?.().catch(() => {})
+			screen.orientation?.lock?.("landscape").catch(() => {})
+		}
 		this.audio.init()
 		this.audio.resume()
 		this.audio.setEnabled(this.options.audio)
@@ -227,6 +265,7 @@ class Game {
 		$("gameover").classList.add("hidden")
 		$("pause").classList.add("hidden")
 		this.hud.show(true)
+		this.touch.setVisible(this.isTouch)
 		this.input.requestLock()
 		this.audio.startMusic()
 		this.hud.banner("SUIT UP", "CAPTAIN DANYLO — GO")
@@ -234,8 +273,10 @@ class Game {
 
 	pause() {
 		if (this.state !== "playing") return
+		this.touch.releaseAll()
 		this.state = "paused"
 		$("pause").classList.remove("hidden")
+		this.touch.setVisible(false)
 		this.input.exitLock()
 	}
 
@@ -243,6 +284,7 @@ class Game {
 		if (this.state !== "paused") return
 		$("pause").classList.add("hidden")
 		this.state = "playing"
+		this.touch.setVisible(this.isTouch)
 		this.input.requestLock()
 		this.audio.resume()
 	}
@@ -253,6 +295,7 @@ class Game {
 		$("gameover").classList.add("hidden")
 		$("title").classList.remove("hidden")
 		this.hud.show(false)
+		this.touch.setVisible(false)
 		this.input.exitLock()
 		this.audio.stopMusic()
 		this.resetRun()
@@ -260,6 +303,7 @@ class Game {
 
 	gameOver() {
 		this.state = "over"
+		this.touch.setVisible(false)
 		this.audio.stopMusic()
 		this.audio.gameOver()
 		this.input.exitLock()
@@ -491,6 +535,12 @@ class Game {
 		this.comboT = 0
 	}
 
+	/** True while the primary weapon should be firing, by button or auto-fire. */
+	get firing() {
+		if (this.hero.charging) return false
+		return this.input.mouse.left || (this.autoFire && this.aimHostile)
+	}
+
 	shake(amount) {
 		if (!this.options.shake) return
 		this.trauma = clamp(this.trauma + amount, 0, 1.4)
@@ -607,6 +657,7 @@ class Game {
 				this.aimPoint.copy(ray.origin).addScaledVector(ray.direction, 120)
 			}
 		}
+		this.aimHostile = hitEnemy
 		this.hud.setHostile(hitEnemy)
 	}
 

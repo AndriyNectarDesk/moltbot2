@@ -2,7 +2,12 @@
 <html lang="en">
 	<head>
 		<meta charset="UTF-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+		<meta
+			name="viewport"
+			content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+		/>
+		<meta name="mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 		<title>DANYLO: NECTAR NOVA</title>
 		<meta
 			name="description"
@@ -95,6 +100,21 @@
 				<div id="floaters"></div>
 				<div id="low-health-warn" class="hidden">CRITICAL</div>
 				<div id="perf"><b id="perf-fps">60</b> FPS <span id="perf-tier">MEDIUM</span></div>
+				<button id="btn-pause" class="touch-only">II</button>
+			</div>
+
+			<!-- ============ TOUCH CONTROLS ============ -->
+			<div id="touch" class="hidden">
+				<div id="touch-left"></div>
+				<div id="touch-right"></div>
+				<div id="stick-base"><span id="stick-knob"></span></div>
+				<div id="touch-buttons">
+					<button id="btn-nova" class="tbtn tbtn-nova">NOVA</button>
+					<button id="btn-beam" class="tbtn">BEAM</button>
+					<button id="btn-dash" class="tbtn">DASH</button>
+					<button id="btn-fire" class="tbtn tbtn-fire">FIRE</button>
+					<button id="btn-jump" class="tbtn tbtn-jump">FLY</button>
+				</div>
 			</div>
 
 			<!-- ============ SCREENS ============ -->
@@ -107,7 +127,7 @@
 						<br />Suit up, hero.
 					</p>
 					<button id="btn-play">LAUNCH</button>
-					<div class="t-keys">
+					<div class="t-keys desktop-only">
 						<div><b>WASD</b> move</div>
 						<div><b>MOUSE</b> aim</div>
 						<div><b>CLICK</b> plasma</div>
@@ -117,9 +137,15 @@
 						<div><b>Q</b> nova blast</div>
 						<div><b>ESC</b> pause &nbsp;•&nbsp; <b>M</b> mute</div>
 					</div>
+					<div class="t-keys touch-only">
+						<div><b>LEFT THUMB</b> move</div>
+						<div><b>RIGHT THUMB</b> drag to aim</div>
+						<div><b>FIRE</b> auto-fires at targets</div>
+						<div><b>FLY</b> tap to jump, hold to fly</div>
+					</div>
 					<div class="t-foot">
-						Desktop browser with a mouse. Graphics auto-tune to your machine —
-						change them any time with <b>ESC</b>.
+						Graphics auto-tune to your device — change them any time from the
+						pause button.
 					</div>
 				</div>
 			</div>
@@ -139,6 +165,7 @@
 							<option value="potato">Potato</option>
 						</select>
 					</label>
+					<label class="toggle"><input type="checkbox" id="opt-autofire" /> Auto-fire at targets</label>
 					<label class="toggle"><input type="checkbox" id="opt-fps" checked /> Show FPS</label>
 					<label class="toggle"><input type="checkbox" id="opt-bloom" checked /> Bloom &amp; glow</label>
 					<label class="toggle"><input type="checkbox" id="opt-audio" checked /> Audio</label>
@@ -158,6 +185,14 @@
 					</div>
 					<div id="go-rank">ROOKIE</div>
 					<button id="btn-again">FLY AGAIN</button>
+				</div>
+			</div>
+
+			<div id="rotate" class="screen hidden">
+				<div class="t-inner">
+					<div class="rotate-icon">📱</div>
+					<h2>TURN SIDEWAYS</h2>
+					<p class="t-sub">Captain Danylo needs a wider sky. Rotate your device to landscape.</p>
 				</div>
 			</div>
 

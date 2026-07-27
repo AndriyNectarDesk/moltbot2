@@ -911,3 +911,423 @@ h2 {
 body.playing {
 	cursor: none;
 }
+
+/* ============================================================
+   TOUCH CONTROLS
+   ============================================================ */
+#touch {
+	position: absolute;
+	inset: 0;
+	z-index: 20;
+	touch-action: none;
+}
+
+#touch-left,
+#touch-right {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	touch-action: none;
+}
+
+#touch-left {
+	left: 0;
+	width: 45%;
+}
+
+#touch-right {
+	right: 0;
+	width: 55%;
+}
+
+#stick-base {
+	position: absolute;
+	width: 132px;
+	height: 132px;
+	margin: -66px 0 0 -66px;
+	border-radius: 50%;
+	border: 2px solid rgba(255, 255, 255, 0.22);
+	background: rgba(10, 6, 22, 0.28);
+	opacity: 0;
+	transition: opacity 0.12s;
+	pointer-events: none;
+}
+
+#stick-base.active {
+	opacity: 1;
+}
+
+#stick-knob {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 56px;
+	height: 56px;
+	margin: 0;
+	border-radius: 50%;
+	transform: translate(-50%, -50%);
+	background: radial-gradient(circle at 40% 35%, rgba(255, 190, 120, 0.95), rgba(255, 122, 26, 0.7));
+	box-shadow: 0 0 22px rgba(255, 122, 26, 0.6);
+}
+
+#touch-buttons {
+	position: absolute;
+	right: max(18px, env(safe-area-inset-right));
+	bottom: max(16px, env(safe-area-inset-bottom));
+	display: grid;
+	grid-template-areas:
+		"nova beam dash"
+		"....  fire fly";
+	gap: 10px;
+	align-items: end;
+	justify-items: center;
+	pointer-events: none;
+}
+
+#btn-nova {
+	grid-area: nova;
+}
+
+#btn-beam {
+	grid-area: beam;
+}
+
+#btn-dash {
+	grid-area: dash;
+}
+
+#btn-fire {
+	grid-area: fire;
+}
+
+#btn-jump {
+	grid-area: fly;
+}
+
+.tbtn {
+	pointer-events: auto;
+	touch-action: none;
+	-webkit-tap-highlight-color: transparent;
+	width: 68px;
+	height: 68px;
+	padding: 0;
+	margin: 0;
+	border-radius: 50%;
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 1.5px;
+	color: rgba(255, 255, 255, 0.9);
+	background: rgba(12, 7, 26, 0.55);
+	border: 2px solid rgba(255, 255, 255, 0.28);
+	box-shadow: none;
+	backdrop-filter: none;
+	transition: transform 0.07s, background 0.07s;
+}
+
+.tbtn:hover {
+	transform: none;
+	box-shadow: none;
+	filter: none;
+}
+
+.tbtn.held {
+	transform: scale(0.92);
+	background: rgba(255, 122, 26, 0.5);
+	border-color: var(--orange-hot);
+}
+
+.tbtn-fire {
+	width: 92px;
+	height: 92px;
+	font-size: 13px;
+	border-color: rgba(49, 230, 255, 0.6);
+	background: rgba(20, 60, 80, 0.5);
+	color: var(--cyan);
+}
+
+.tbtn-jump {
+	width: 84px;
+	height: 84px;
+	border-color: rgba(255, 179, 71, 0.55);
+}
+
+.tbtn-nova {
+	border-color: rgba(255, 122, 26, 0.45);
+	color: var(--orange-hot);
+}
+
+#btn-pause {
+	position: absolute;
+	top: max(12px, env(safe-area-inset-top));
+	right: max(12px, env(safe-area-inset-right));
+	width: 42px;
+	height: 42px;
+	padding: 0;
+	font-size: 15px;
+	letter-spacing: 1px;
+	border-radius: 10px;
+	background: rgba(12, 7, 26, 0.6);
+	border: 1px solid rgba(255, 255, 255, 0.25);
+	color: rgba(255, 255, 255, 0.85);
+	box-shadow: none;
+	pointer-events: auto;
+	z-index: 25;
+}
+
+/* touch-only / desktop-only visibility */
+.touch-only {
+	display: none;
+}
+
+body.touch .touch-only {
+	display: block;
+}
+
+body.touch .t-keys.touch-only {
+	display: grid;
+}
+
+body.touch .desktop-only,
+body.touch .t-keys.desktop-only {
+	display: none !important;
+}
+
+body.touch {
+	cursor: default;
+	overscroll-behavior: none;
+}
+
+body.touch #crosshair {
+	/* thumb-aiming needs a more visible reticle */
+	transform: translate(-50%, -50%) scale(1.15);
+}
+
+/* ============================================================
+   SMALL SCREENS — the HUD was laid out for a desktop window
+   ============================================================ */
+.rotate-icon {
+	font-size: 54px;
+	margin-bottom: 12px;
+	animation: rotatehint 2s ease-in-out infinite;
+}
+
+@keyframes rotatehint {
+
+	0%,
+	100% {
+		transform: rotate(0deg);
+	}
+
+	50% {
+		transform: rotate(-90deg);
+	}
+}
+
+@media (max-width: 900px), (max-height: 560px) {
+	#hero-card {
+		left: max(10px, env(safe-area-inset-left));
+		top: max(10px, env(safe-area-inset-top));
+		gap: 8px;
+	}
+
+	#portrait {
+		width: 46px;
+		height: 46px;
+		border-radius: 10px;
+		border-width: 1px;
+	}
+
+	.hc-body {
+		width: 150px;
+	}
+
+	.hc-name {
+		font-size: 10px;
+		letter-spacing: 1.6px;
+		margin-bottom: 3px;
+	}
+
+	.bar {
+		height: 11px;
+		margin-bottom: 3px;
+	}
+
+	.bar span {
+		font-size: 8px;
+		letter-spacing: 1px;
+	}
+
+	.bar-en {
+		height: 6px;
+	}
+
+	.bar-en span {
+		display: none;
+	}
+
+	#score-box {
+		right: 68px;
+		top: max(10px, env(safe-area-inset-top));
+	}
+
+	#score {
+		font-size: 24px;
+	}
+
+	#wave-label {
+		font-size: 10px;
+		letter-spacing: 2px;
+	}
+
+	#combo {
+		font-size: 15px;
+	}
+
+	/* the keyboard ability row is meaningless on touch */
+	body.touch #abilities {
+		display: none;
+	}
+
+	#abilities {
+		bottom: 12px;
+		transform: translateX(-50%) scale(0.8);
+	}
+
+	#banner {
+		font-size: 30px;
+		letter-spacing: 5px;
+		top: 26%;
+	}
+
+	#banner small {
+		font-size: 12px;
+		letter-spacing: 3px;
+	}
+
+	#killfeed {
+		display: none;
+	}
+
+	#boss-bar {
+		width: min(360px, 62vw);
+		top: 52px;
+	}
+
+	.bb-name {
+		font-size: 11px;
+		letter-spacing: 4px;
+	}
+
+	.floater {
+		font-size: 15px;
+	}
+
+	.floater.crit {
+		font-size: 20px;
+	}
+
+	#perf {
+		left: max(10px, env(safe-area-inset-left));
+		bottom: 6px;
+		font-size: 9px;
+	}
+
+	#low-health-warn {
+		bottom: 120px;
+		font-size: 12px;
+		letter-spacing: 5px;
+	}
+
+	.t-inner {
+		padding: 14px;
+	}
+
+	.t-sub {
+		font-size: 13px;
+		margin: 12px auto 16px;
+		line-height: 1.45;
+	}
+
+	.t-kicker {
+		font-size: 10px;
+		letter-spacing: 5px;
+	}
+
+	button {
+		font-size: 15px;
+		letter-spacing: 4px;
+		padding: 12px 34px;
+	}
+
+	.t-keys {
+		font-size: 11px;
+		gap: 4px 12px;
+		margin-top: 16px;
+	}
+
+	.go-stats {
+		gap: 16px;
+	}
+
+	.go-stats b {
+		font-size: 22px;
+	}
+
+	.go-stats div {
+		min-width: 72px;
+	}
+
+	#go-rank {
+		font-size: 16px;
+		letter-spacing: 5px;
+		margin-bottom: 16px;
+	}
+}
+
+/* very short viewports (phone in landscape) */
+@media (max-height: 430px) {
+	.tbtn {
+		width: 56px;
+		height: 56px;
+		font-size: 10px;
+	}
+
+	.tbtn-fire {
+		width: 74px;
+		height: 74px;
+	}
+
+	.tbtn-jump {
+		width: 68px;
+		height: 68px;
+	}
+
+	#stick-base {
+		width: 108px;
+		height: 108px;
+		margin: -54px 0 0 -54px;
+	}
+
+	#stick-knob {
+		width: 46px;
+		height: 46px;
+	}
+
+	.t-title span {
+		font-size: clamp(34px, 9vw, 60px);
+		letter-spacing: 5px;
+	}
+
+	.t-title em {
+		font-size: 13px;
+		letter-spacing: 8px;
+	}
+
+	.t-sub {
+		display: none;
+	}
+
+	.t-keys {
+		margin-top: 10px;
+	}
+}

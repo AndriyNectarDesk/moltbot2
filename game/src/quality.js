@@ -92,6 +92,12 @@ export class Quality {
 		const px = window.innerWidth * window.innerHeight * dpr * dpr
 		const cores = navigator.hardwareConcurrency || 4
 		const mem = navigator.deviceMemory || 4
+		const touch = matchMedia("(hover: none) and (pointer: coarse)").matches
+
+		// Phones and tablets: start low and let the scaler climb if there is
+		// headroom. Guessing high on a phone means the first few seconds are a
+		// slideshow, which is exactly the first impression to avoid.
+		if (touch) return cores >= 8 && mem >= 6 && dpr <= 3 ? "low" : "potato"
 
 		let tier = "medium"
 		// A lot of pixels to push, or a modest machine → start lower.
