@@ -9,6 +9,7 @@
     "deploy": "npm run build && wrangler deploy",
     "dev": "vite dev",
     "game": "node game/serve.mjs",
+    "leaderboard:deploy": "wrangler deploy --config leaderboard/wrangler.jsonc",
     "start": "wrangler dev",
     "types": "wrangler types",
     "typecheck": "tsc --noEmit",

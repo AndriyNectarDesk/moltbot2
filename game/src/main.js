@@ -16,6 +16,7 @@ import { Projectiles, Pickups } from "./projectiles.js"
 import { HUD } from "./hud.js"
 import { Quality, PRESETS } from "./quality.js"
 import { TouchControls } from "./touch.js"
+import { Leaderboard, cleanName } from "./leaderboard.js"
 import { Brute, Lancer, MoltbotPrime, Skitter, Zipper } from "./enemies.js"
 
 const $ = (id) => document.getElementById(id)
@@ -57,6 +58,7 @@ class Game {
 		this.autoFire = this.isTouch
 		this.aimHostile = false
 		this.hud = new HUD()
+		this.board = new Leaderboard()
 
 		this.world = new World(this.scene)
 		this.fx = new FX(this.scene)
@@ -93,6 +95,7 @@ class Game {
 		addEventListener("resize", () => this._resize())
 		this._resize()
 
+		this.refreshTitleBoard()
 		$("loading").classList.add("hidden")
 		this.clock = new THREE.Clock()
 		this._loop = this._loop.bind(this)
@@ -186,6 +189,55 @@ class Game {
 		opt("opt-invert", "invertY", (v) => (this.input.invertY = v))
 		opt("opt-sens", "sens", (v) => (this.input.sensitivity = v / 100))
 
+		const submitBtn = $("btn-submit")
+		const nameInput = $("go-name")
+		submitBtn.onclick = async () => {
+			if (this._submitted) return
+			const name = cleanName(nameInput.value)
+			const msg = $("go-submit-msg")
+			if (!name) {
+				msg.textContent = "ENTER A NAME FIRST"
+				msg.classList.add("warn")
+				nameInput.focus()
+				return
+			}
+			this._submitted = true
+			this.board.setName(name)
+			nameInput.value = name
+			submitBtn.disabled = true
+			submitBtn.textContent = "POSTING…"
+			msg.classList.remove("warn")
+			msg.textContent = ""
+
+			const res = await this.board.submit({
+				score: this.score,
+				wave: this.wave,
+				kills: this.kills,
+				combo: this.bestCombo,
+			})
+			submitBtn.textContent = "POSTED"
+			this._renderBoard($("go-board"), res.entries.slice(0, 8), {
+				shared: res.shared,
+				highlightAt: res.rank,
+				title: "TOP RUNS",
+			})
+			if (res.rank === 1) {
+				msg.textContent = res.shared ? "NEW WORLD RECORD" : "NEW PERSONAL BEST"
+			} else if (res.rank) {
+				msg.textContent = `RANK #${res.rank}`
+			}
+			if (!res.shared && this.board.shared) {
+				// Configured for a shared board but we couldn't reach it.
+				msg.textContent = "SAVED ON THIS DEVICE — BOARD UNREACHABLE"
+				msg.classList.add("warn")
+			}
+			this.refreshTitleBoard()
+		}
+		nameInput.addEventListener("keydown", (e) => {
+			e.stopPropagation()
+			if (e.key === "Enter") submitBtn.click()
+		})
+
 		const pauseBtn = $("btn-pause")
 		if (pauseBtn) pauseBtn.onclick = () => (this.state === "playing" ? this.pause() : this.resume())
 
@@ -210,6 +262,37 @@ class Game {
 			document.body.classList.toggle("playing", locked)
 			if (!locked && this.state === "playing") this.pause()
 		}
+	}
+
+	/** Paint a score table into a container. */
+	_renderBoard(el, entries, { shared, highlightAt = null, title }) {
+		if (!el) return
+		const head = `<div class="board-title">${title}${shared ? "" : " · THIS DEVICE"}</div>`
+		if (!entries.length) {
+			el.innerHTML = `${head}<div class="board-empty">NO RUNS YET — BE THE FIRST</div>`
+			return
+		}
+		const rows = entries
+			.map((e, i) => {
+				const you = highlightAt === i + 1 ? " you" : ""
+				const name = String(e.name || "ANON").replace(/[<>&]/g, "")
+				return (
+					`<div class="board-row top-${i + 1}${you}">` +
+					`<span class="rk">${i + 1}</span>` +
+					`<span class="nm">${name}</span>` +
+					`<span class="wv">W${e.wave}</span>` +
+					`<span class="sc">${Number(e.score).toLocaleString()}</span>` +
+					`</div>`
+				)
+			})
+			.join("")
+		el.innerHTML = head + rows
+	}
+
+	/** Refresh the compact table on the title screen. */
+	async refreshTitleBoard() {
+		const { entries, shared } = await this.board.top(5)
+		this._renderBoard($("title-board"), entries, { shared, title: "HALL OF FAME" })
 	}
 
 	_onQualityChange(tier, fromAuto) {
@@ -294,6 +377,7 @@ class Game {
 		$("pause").classList.add("hidden")
 		$("gameover").classList.add("hidden")
 		$("title").classList.remove("hidden")
+		this.refreshTitleBoard()
 		this.hud.show(false)
 		this.touch.setVisible(false)
 		this.input.exitLock()
@@ -316,6 +400,18 @@ class Game {
 		$("go-rank").textContent = rank
 		$("go-title").textContent = this.wave >= 10 ? "HERO DOWN" : "DOWN BUT NOT OUT"
 		$("gameover").classList.remove("hidden")
+
+		// Pre-fill the remembered name and reset the form for this run.
+		const nameInput = $("go-name")
+		nameInput.value = this.board.name
+		$("go-submit-msg").textContent = ""
+		$("go-submit-msg").classList.remove("warn")
+		$("btn-submit").disabled = false
+		$("btn-submit").textContent = "POST SCORE"
+		this._submitted = false
+		this.board.top(8).then(({ entries, shared }) =>
+			this._renderBoard($("go-board"), entries, { shared, title: "TOP RUNS" }),
+		)
 	}
 
 	// ------------------------------------------------------------ waves
