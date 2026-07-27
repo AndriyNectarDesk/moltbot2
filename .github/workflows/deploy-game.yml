@@ -1,0 +1,48 @@
+name: Deploy game to GitHub Pages
+
+# Publishes game/ (DANYLO: NECTAR NOVA) to GitHub Pages.
+# The game is plain static files — no build step, no dependencies — so this just
+# uploads the folder. `configure-pages` with enablement:true turns Pages on the
+# first time it runs, so there is nothing to click in repo settings.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "game/**"
+      - ".github/workflows/deploy-game.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never run two Pages deploys at once; let an in-flight one finish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Upload game/ as the Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: game
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
