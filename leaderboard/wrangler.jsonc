@@ -10,10 +10,10 @@
   "kv_namespaces": [
     {
       "binding": "SCORES",
-      "id": "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+      "id": "2e0724e15cbe4883a41371bc2e61d57b"
     }
-  ]
+  ],
 
   // Optional: restrict who may call the API. Without this any site can.
-  // "vars": { "ALLOWED_ORIGINS": "https://andriynectardesk.github.io" }
+  "vars": { "ALLOWED_ORIGINS": "https://andriynectardesk.github.io" }
 }

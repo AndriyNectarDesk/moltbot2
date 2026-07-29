@@ -11,4 +11,4 @@
 //   export const LEADERBOARD_URL = "https://nectar-nova-scores.you.workers.dev"
 // ---------------------------------------------------------------------------
 
-export const LEADERBOARD_URL = ""
+export const LEADERBOARD_URL = "https://nectar-nova-scores.nectardesk.workers.dev"
