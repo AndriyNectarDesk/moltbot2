@@ -175,6 +175,9 @@ class Game {
 		$("btn-again").onclick = () => this.start()
 		$("btn-resume").onclick = () => this.resume()
 		$("btn-quit").onclick = () => this.toMenu()
+		// Every screen that can trap you needs a way out; the game-over screen used
+		// to offer nothing but "play again".
+		$("btn-menu-after").onclick = () => this.toMenu()
 
 		const pauseBtn = $("btn-pause")
 		if (pauseBtn) pauseBtn.onclick = () => (this.state === "playing" ? this.pause() : this.resume())

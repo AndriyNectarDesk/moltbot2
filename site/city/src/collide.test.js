@@ -192,22 +192,37 @@ describe("pushing a circle out of walls", () => {
 		let checked = 0
 		let seed = 99
 		const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff), seed / 0x7fffffff)
+		// Violations are collected and asserted once at the end rather than
+		// expect()-ing inside the inner loop. Two thousand samples against sixty-four
+		// boxes is ~128,000 assertions, which took over five seconds and tripped
+		// vitest's default timeout the moment the machine was busy — a test that
+		// fails depending on how loaded the CI runner is might as well not exist.
+		const bad = []
 		for (let i = 0; i < 2000; i++) {
 			const x = (rnd() - 0.5) * 320
 			const z = (rnd() - 0.5) * 320
 			const r = resolveCircle(city, x, z, RADIUS)
-			expect(Number.isFinite(r.x) && Number.isFinite(r.z)).toBe(true)
+			if (!Number.isFinite(r.x) || !Number.isFinite(r.z)) {
+				bad.push(`non-finite result from ${x.toFixed(1)},${z.toFixed(1)}`)
+				continue
+			}
 			if (!r.hit) continue
 			checked++
 			for (const b of city.boxes) {
-				const inside = r.x > b.minX && r.x < b.maxX && r.z > b.minZ && r.z < b.maxZ
-				expect(inside, `centre ended up inside a box at ${r.x},${r.z}`).toBe(false)
+				if (r.x > b.minX && r.x < b.maxX && r.z > b.minZ && r.z < b.maxZ) {
+					bad.push(`centre inside box ${b.id} at ${r.x.toFixed(2)},${r.z.toFixed(2)}`)
+					break
+				}
 				const cx = Math.max(b.minX, Math.min(r.x, b.maxX))
 				const cz = Math.max(b.minZ, Math.min(r.z, b.maxZ))
-				// Fully separated: not touching any building at all.
-				expect(Math.hypot(r.x - cx, r.z - cz)).toBeGreaterThan(RADIUS - 1e-6)
+				if (Math.hypot(r.x - cx, r.z - cz) < RADIUS - 1e-6) {
+					bad.push(`overlapping box ${b.id} at ${r.x.toFixed(2)},${r.z.toFixed(2)}`)
+					break
+				}
 			}
 		}
+		expect(bad.slice(0, 5)).toEqual([])
+		// And the sweep has to have actually hit something to mean anything.
 		expect(checked).toBeGreaterThan(100)
 	})
 

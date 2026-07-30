@@ -180,6 +180,58 @@ button.ghost {
 	padding: 10px 26px;
 }
 
+/**
+ * A consistent way out, on every screen that could otherwise trap you.
+ *
+ * All three games grew their own ad-hoc buttons and two of them ended up with a
+ * game-over screen whose only option was to play again — no route to the title,
+ * and no route back to the arcade. Every pause and every end screen now carries
+ * the same row: back to this game's menu, and out to all the games.
+ */
+.exits {
+	display: flex;
+	gap: 6px;
+	justify-content: center;
+	flex-wrap: wrap;
+	margin-top: 16px;
+	padding-top: 14px;
+	border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* An <a> that looks and behaves like a ghost button, so "ALL GAMES" can be a
+   real link rather than a button with a JS handler. */
+a.ghost {
+	display: inline-block;
+	text-decoration: none;
+	pointer-events: auto;
+	font-family: inherit;
+	font-size: 13px;
+	font-weight: 700;
+	letter-spacing: 4px;
+	padding: 10px 26px;
+	margin: 6px;
+	border-radius: 4px;
+	background: transparent;
+	color: rgba(255, 255, 255, 0.7);
+	border: 1px solid rgba(255, 255, 255, 0.3);
+	cursor: pointer;
+	transition: transform 0.12s, border-color 0.12s, color 0.12s;
+}
+
+a.ghost:hover {
+	transform: translateY(-2px);
+	border-color: var(--cyan);
+	color: #fff;
+}
+
+.exits button.ghost,
+.exits a.ghost {
+	font-size: 11px;
+	letter-spacing: 3px;
+	padding: 8px 18px;
+	margin: 0;
+}
+
 button.small {
 	font-size: 12px;
 	letter-spacing: 3px;

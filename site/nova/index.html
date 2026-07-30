@@ -157,7 +157,6 @@
 				<div class="t-inner">
 					<h2>PAUSED</h2>
 					<button id="btn-resume">RESUME</button>
-					<button class="ghost" id="btn-quit">ABANDON MISSION</button>
 					<label class="toggle"><input type="checkbox" id="opt-shake" checked /> Screen shake</label>
 					<label class="slider">Graphics
 						<select id="opt-quality">
@@ -174,6 +173,10 @@
 					<label class="toggle"><input type="checkbox" id="opt-audio" checked /> Audio</label>
 					<label class="toggle"><input type="checkbox" id="opt-invert" /> Invert Y</label>
 					<label class="slider">Mouse sensitivity <input type="range" id="opt-sens" min="20" max="300" value="100" /></label>
+					<div class="exits">
+						<button class="ghost" id="btn-quit">ABANDON MISSION</button>
+						<a class="ghost" href="../">ALL GAMES</a>
+					</div>
 				</div>
 			</div>
 
@@ -209,6 +212,10 @@
 
 					<div id="go-board" class="board"></div>
 					<button id="btn-again">FLY AGAIN</button>
+					<div class="exits">
+						<button class="ghost" id="btn-menu-after">TITLE SCREEN</button>
+						<a class="ghost" href="../">ALL GAMES</a>
+					</div>
 				</div>
 			</div>
 
