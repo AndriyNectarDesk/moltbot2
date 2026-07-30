@@ -48,9 +48,11 @@ Now that a second game exists, that bet can be scored. Diffing `fish/src` agains
 
 - **`fx.js` — identical.** This one is genuinely shareable; do it when the third
   game confirms the shape.
-- **`audio.js` — engine identical, everything above it different.** The synth
-  primitives and the look-ahead scheduler didn't move a line; the sound bank and
-  the music are wholly new. Worth splitting into an engine plus a per-game bank.
+- **`audio.js` — synth primitives identical, everything above them different.**
+  `init`, `_env`, `_tone` and `_noise` are unchanged. The scheduler's *shape* is
+  reused but its numbers are not (52 bpm against 132, a longer look-ahead), and
+  the sound bank and the music are wholly new. Worth splitting into an engine
+  plus a per-game bank.
 - **`quality.js` — scaler identical, `apply()` and the preset flags different**,
   exactly as predicted. A shared version needs an injected `onApply(preset)` and
   a per-game extras bag, which is now a known shape rather than a guess.
@@ -59,7 +61,7 @@ Now that a second game exists, that bet can be scored. Diffing `fish/src` agains
   successful result, not a failure.
 - **`shared/input.js` — not reused either.** It's built on pointer lock and
   relative deltas; the fishing game needs an absolute position on the water and
-  never grabs the cursor, so it has its own 110-line `pointer.js`.
+  never grabs the cursor, so it has its own small `pointer.js`.
 
 Conclusion so far: share `fx.js` and split `audio.js`; leave `quality.js` until a
 third consumer proves the callback shape; don't share input at all.
@@ -98,8 +100,9 @@ feature of the test — it proves nothing is absolute.
 exactly one `three.module.min.js`, loaded from `/vendor/` and not
 `/nova/vendor/`; `shared/base.css` and `nova/style.css` both 200; zero 404s.
 
-**Hub:** three cards render, only Nova is clickable, the prize board loads (or
-says it can't reach the board without breaking the page), the rules expand.
+**Hub:** three cards render, Nova and Quiet Water are clickable and City Lights
+is not, the prize board loads (or says it can't reach the board without breaking
+the page), the rules expand.
 
 **Nova, desktop:** no console errors · neon title intact · `← ALL GAMES` returns
 to the hub · title board loads · LAUNCH takes pointer lock · WASD moves
@@ -119,6 +122,14 @@ rank plus prize points · GUEST saves locally and the table says `THIS DEVICE`.
 **Nova, phone:** portrait shows the rotate screen · landscape shows the stick and
 all five buttons · auto-fire defaults on · starts on a low graphics tier and
 climbs.
+
+**Quiet Water:** cast lands where the bright ring shows · the water name under
+the reticle changes over lilies, the dock shade and a rising ring · the float taps
+then goes under · striking during the taps spooks, striking after it goes under
+hooks · during a fight the bar flashes gold and says LET GO before every run ·
+letting go on that survives, holding through it snaps · landing shows a catch card
+and the flow multiplier climbs · the clock ends the run and the game-over screen
+shows five stats.
 
 **Devtools poke test:** `window.game`, `window.__THREE` and
 `game.hero.hp = 9999` all still work. That is a documented feature of this

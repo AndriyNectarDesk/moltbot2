@@ -292,7 +292,10 @@ async function handleScore(request, env, origin, gameId) {
 	// These two cover the gap the other signals leave.
 	if (EYEBROW[gameId] != null && score > EYEBROW[gameId]) added.push(`high:${score}`)
 	for (const field of game.suspiciousMax || []) {
-		if (stats[field] === game.stats[field].max) added.push(`maxed:${field}`)
+		// Guarded: a config typo naming an undeclared stat would otherwise 500 the
+		// submit endpoint rather than just failing to flag.
+		const range = game.stats[field]
+		if (range && stats[field] === range.max) added.push(`maxed:${field}`)
 	}
 	if (Number.isFinite(Number(body.durationMs))) {
 		const secs = Number(body.durationMs) / 1000

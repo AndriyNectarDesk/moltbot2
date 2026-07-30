@@ -307,6 +307,50 @@ body {
 	border-color: var(--danger);
 }
 
+/* The telegraph. This is the single most important thing on the screen during a
+   fight — seeing it and letting go is what lets you hold a high, fast-reeling
+   tension the rest of the time — so it gets a hard, obvious treatment rather
+   than a tasteful one. */
+#tension.warn {
+	border-color: var(--orange-hot);
+	box-shadow: 0 0 26px rgba(240, 205, 134, 0.9);
+}
+
+#tension.warn::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	background: rgba(240, 205, 134, 0.35);
+	animation: braceFlash 0.16s steps(1) infinite alternate;
+}
+
+@keyframes braceFlash {
+	from {
+		opacity: 0.15;
+	}
+	to {
+		opacity: 0.9;
+	}
+}
+
+#fighting.bracing #fight-name::after {
+	content: " — LET GO";
+	color: var(--orange-hot);
+}
+
+#fighting.bracing {
+	animation: braceShake 0.09s linear infinite alternate;
+}
+
+@keyframes braceShake {
+	from {
+		transform: translateX(-50%) translateY(0);
+	}
+	to {
+		transform: translateX(-50%) translateY(-2px);
+	}
+}
+
 @keyframes pulse {
 	from {
 		box-shadow: 0 0 0 rgba(224, 112, 63, 0);

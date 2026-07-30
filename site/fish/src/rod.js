@@ -149,6 +149,9 @@ export class Rod {
 		this.sink = 0
 		this._sinkShown = 0
 		this.taut = 0
+		// Clear the wind-up too, or a run that ends mid-charge leaves the rod
+		// permanently bent on the title screen.
+		this.charge = 0
 		this.bobberGroup.visible = false
 		this.line.visible = false
 	}
@@ -184,7 +187,10 @@ export class Rod {
 
 		// The visible dip lags the requested one, which is what turns a number
 		// into a tell you can read.
-		this._sinkShown = damp(this._sinkShown, this.sink, 0.0007, dt)
+		// Fast enough that a 105 ms flick actually reaches the screen. At the old
+		// 0.138 s time constant the two quickest tells showed less than half their
+		// amplitude, which put them below the movement of the wave underneath.
+		this._sinkShown = damp(this._sinkShown, this.sink, 2e-8, dt)
 
 		if (this.inWater) {
 			const surface = this.lake.heightAt(this.bobber.x, this.bobber.z)

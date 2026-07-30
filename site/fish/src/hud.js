@@ -126,15 +126,26 @@ export class HUD {
 
 	hideFight() {
 		this.el.fighting.classList.add("hidden")
-		this.el.tension.classList.remove("danger")
+		this.el.fighting.classList.remove("bracing")
+		this.el.tension.classList.remove("danger", "warn")
 		this.el.tensionFill.style.width = "0%"
 		this.el.lineFill.style.width = "0%"
 	}
 
-	setFight(tension, progress, danger) {
+	/**
+	 * @param warning the fish is gathering itself for a run
+	 *
+	 * The warning state has to be impossible to miss, because it is the entire
+	 * skill gate: seeing it and letting go is what lets a player hold a high,
+	 * fast-reeling tension the rest of the time. If it were subtle the mechanic
+	 * would exist without being usable.
+	 */
+	setFight(tension, progress, danger, warning) {
 		this.el.tensionFill.style.width = `${clamp(tension, 0, 1) * 100}%`
 		this.el.lineFill.style.width = `${clamp(progress, 0, 1) * 100}%`
 		this.el.tension.classList.toggle("danger", danger)
+		this.el.tension.classList.toggle("warn", warning)
+		this.el.fighting.classList.toggle("bracing", warning)
 	}
 
 	// ------------------------------------------------------------ results

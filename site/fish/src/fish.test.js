@@ -41,9 +41,13 @@ function play(id, grams, lineOut, policy, maxSeconds = 120) {
 	return { result: fight.result || "timeout", seconds: t, fight, reelFrames }
 }
 
-// Reel whenever it's safe to, ease off in the red and during runs. This is what
-// a player who has understood the game does.
-const skilled = (f) => !f.running && f.tension < 0.62
+// Watches the fish, not just the bar: lets go the instant it telegraphs a run,
+// which is what buys the headroom to hold a high tension the rest of the time.
+const reading = (f) => !f.warning && !f.running && f.tension < 0.9
+
+// A thermostat. Sees only the bar, never the fish. This is the policy that used
+// to beat proper play, so it now has a test of its own below.
+const blindAt = (t) => (f) => f.tension < t
 
 // Hold the reel down the whole time.
 const greedy = () => true
@@ -69,11 +73,36 @@ describe("the fight rewards restraint", () => {
 	it("lands everything when played well", () => {
 		for (const id of SPECIES_IDS) {
 			const grams = SPECIES[id].grams[1]
-			const r = trial(id, grams, 20, skilled, 120)
-			// A player who eases off in the runs and stays out of the red should
+			const r = trial(id, grams, 20, reading, 120)
+			// A player who lets go on the telegraph and rides out the runs should
 			// essentially always land the fish. The difficulty is in knowing to do
 			// that, not in a dice roll going against you.
 			expect(r.landed / 120, `${id} landed rate`).toBeGreaterThan(0.9)
+		}
+	})
+
+	// The regression guard for the whole point of this game. Before the runs were
+	// telegraphed and given an opening shock, a thermostat that never looked at
+	// the fish landed every species 100% of the time and did it slightly FASTER
+	// than proper play — so the advertised skill ceiling did not exist, and the
+	// original version of this suite certified the wrong property because its
+	// "skilled" policy's run check was dead weight.
+	it("punishes a thermostat that never watches the fish", () => {
+		for (const id of ["perch", "bass", "pike", "sturgeon"]) {
+			const r = trial(id, SPECIES[id].grams[1], 20, blindAt(0.8), 80)
+			expect(r.landed / 80, `${id} landed rate playing blind at 0.8`).toBeLessThan(0.5)
+		}
+	})
+
+	// Playing blind is still allowed — it just has to be timid, and timid is slow,
+	// because line comes in faster when the line is tighter.
+	it("makes a blind player go slower to stay safe", () => {
+		for (const id of ["bass", "pike", "sturgeon"]) {
+			const grams = SPECIES[id].grams[1]
+			const safeBlind = trial(id, grams, 20, blindAt(0.5), 60)
+			const attentive = trial(id, grams, 20, reading, 60)
+			expect(safeBlind.landed / 60, `${id} timid blind should still land`).toBeGreaterThan(0.9)
+			expect(attentive.median, `${id} reading should be faster`).toBeLessThan(safeBlind.median)
 		}
 	})
 
@@ -82,6 +111,39 @@ describe("the fight rewards restraint", () => {
 			const r = trial(id, SPECIES[id].grams[1], 20, greedy, 60)
 			expect(r.snapped / 60, `${id} snap rate when greedy`).toBeGreaterThan(0.9)
 		}
+	})
+
+	it("telegraphs every run before it starts", () => {
+		const f = new Fight("pike", 5000, 20)
+		let sawWarnBeforeRun = 0
+		let runs = 0
+		let wasWarning = false
+		let prevRunning = false
+		for (let i = 0; i < 60 * 60; i++) {
+			f.update(STEP, false)
+			if (f.running && !prevRunning) {
+				runs++
+				if (wasWarning) sawWarnBeforeRun++
+			}
+			wasWarning = f.warning
+			prevRunning = f.running
+			if (f.result) break
+		}
+		expect(runs).toBeGreaterThan(2)
+		// No run may arrive unannounced — that is the contract the skill rests on.
+		expect(sawWarnBeforeRun).toBe(runs)
+	})
+
+	it("hits the line the instant a run starts", () => {
+		const f = new Fight("sturgeon", 12000, 20)
+		f.state = "warn"
+		f.stateT = STEP / 2
+		f.tension = 0.4
+		f.update(STEP, false)
+		expect(f.running).toBe(true)
+		// The shock is instant, so it cannot be reacted to — only arrived at with
+		// slack in hand.
+		expect(f.tension).toBeGreaterThan(0.6)
 	})
 
 	// A sunfish is meant to be a freebie — you cannot really lose one, which is
@@ -101,7 +163,7 @@ describe("the fight rewards restraint", () => {
 
 describe("difficulty scales with the prize", () => {
 	it("takes longer to land a bigger fish", () => {
-		const times = SPECIES_IDS.map((id) => trial(id, SPECIES[id].grams[1], 20, skilled, 80).median)
+		const times = SPECIES_IDS.map((id) => trial(id, SPECIES[id].grams[1], 20, reading, 80).median)
 		for (let i = 1; i < times.length; i++) {
 			expect(times[i], `${SPECIES_IDS[i]} vs ${SPECIES_IDS[i - 1]}`).toBeGreaterThan(times[i - 1])
 		}
@@ -110,7 +172,7 @@ describe("difficulty scales with the prize", () => {
 	it("keeps even a sturgeon inside a three-minute run", () => {
 		// If the best fish in the lake couldn't be landed inside the clock it would
 		// be a trap rather than a prize.
-		const r = trial("sturgeon", 17000, 30, skilled, 120)
+		const r = trial("sturgeon", 17000, 30, reading, 120)
 		expect(r.median).toBeLessThan(60)
 	})
 

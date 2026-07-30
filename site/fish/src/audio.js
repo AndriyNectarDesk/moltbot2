@@ -151,6 +151,18 @@ export class Audio {
 		this._tone({ type: "square", freq: 300, to: 520, dur: 0.12, gain: 0.09 })
 	}
 
+	/**
+	 * The telegraph: the fish gathering itself. Deliberately a rising two-note
+	 * figure so it reads as "something is about to happen" rather than as a hit —
+	 * this is the cue that the whole fight skill hangs on, so it has to land even
+	 * if the player is looking at the water instead of the bar.
+	 */
+	brace() {
+		if (!this._ready()) return
+		this._tone({ type: "triangle", freq: 300, to: 470, dur: 0.16, gain: 0.11, attack: 0.01 })
+		this._noise({ dur: 0.16, gain: 0.05, type: "bandpass", freq: 420, q: 1.2 })
+	}
+
 	/** A fresh run — a low surge under the line. */
 	surge() {
 		if (!this._ready()) return

@@ -38,7 +38,7 @@ export const GAMES = {
 	fish: {
 		label: "MIKE: QUIET WATER",
 		// One landed fish is enough to be in the running. The smallest sunfish is
-		// worth 2, so a blank morning still scores 0 and earns nothing.
+		// worth 1, so a blank morning still scores 0 and earns nothing.
 		qualify: 1,
 		brag: (s) => (s.heaviest ? `${(s.heaviest / 1000).toFixed(1)}kg` : ""),
 		stats: {
@@ -51,10 +51,10 @@ export const GAMES = {
 		// and maxing the flow multiplier are both things the game is asking you to
 		// do, and a measured skilled run hits the flow cap routinely.
 		suspiciousMax: ["landed", "heaviest"],
-		// Tuned against measured play rather than guessed: a simulated skilled
-		// three-minute run scores 4–11k, and the single best possible fish is a
-		// 17kg sturgeon at a 3× multiplier, which is 10,200. So a score far above
-		// eleven thousand per landed fish did not come from playing.
+		// Tuned against measured play rather than guessed: a simulated attentive
+		// three-minute run scores 10–15k over 14–16 fish, and the single best
+		// possible fish is a 17kg sturgeon at a 3× multiplier, which is 10,200. So a
+		// score far above eleven thousand per landed fish did not come from playing.
 		plausible: (score, s) => score <= s.landed * 11_000 + 500,
 	},
 
@@ -128,8 +128,8 @@ export const FLAGS = {
  */
 export const EYEBROW = {
 	nova: 100_000,
-	// A very good measured run lands around 11k; 20k is a morning worth asking about.
-	fish: 20_000,
+	// A very good measured run lands around 15k; 30k is a morning worth asking about.
+	fish: 30_000,
 	city: null, // TODO Phase 3
 }
 

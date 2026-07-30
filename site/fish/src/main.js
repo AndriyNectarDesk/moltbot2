@@ -131,6 +131,14 @@ class Game {
 		this.camera.updateProjectionMatrix()
 		this.renderer.setSize(w, h, false)
 		this.composer.setSize(w, h)
+		// composer.setSize resizes the bloom to the full viewport, so the preset's
+		// bloomScale has to be re-applied after it — otherwise the five-mip chain
+		// runs at 100% on every tier that has bloom on, which is roughly 4x the
+		// pixel work the preset table claims to be asking for.
+		if (this.bloom) {
+			const s = this.quality ? this.quality.preset.bloomScale : 0.5
+			this.bloom.setSize(Math.max(64, w * s), Math.max(64, h * s))
+		}
 	}
 
 	/** The reticle: where you are pointing, and where the cast would actually land. */
@@ -440,7 +448,21 @@ class Game {
 		// A fish still on the line at the whistle is lost — landing it is the
 		// achievement, not hooking it.
 		if (this.fight) this._lose("time", { quiet: true })
+		// Put the fishing loop fully back to rest. `_lose({quiet})` deliberately
+		// leaves `phase` alone, so without this the run ends on phase "fight" with
+		// no fight object: the rod's per-frame update is gated off that phase, so
+		// it would sit visibly bent with nothing on the line for as long as the
+		// game-over screen is up, and any future path back to "playing" that
+		// skipped resetRun would dereference a null fight.
+		this.phase = "idle"
+		this.bite = null
+		this._warned = false
 		this.rod.reelIn()
+		this.hud.hidePower()
+		this.hud.hidePrompt()
+		this.hud.setSpot(null)
+		this.aimTarget.visible = false
+		this.aimLanding.visible = false
 		this._clearHooked()
 		this.hud.show(false)
 
@@ -609,10 +631,20 @@ class Game {
 	}
 
 	_clearHooked() {
-		if (this.hookedMesh) {
-			this.scene.remove(this.hookedMesh)
-			this.hookedMesh = null
-		}
+		if (!this.hookedMesh) return
+		this.scene.remove(this.hookedMesh)
+		// scene.remove frees nothing on the GPU — three.js only releases buffers
+		// and programs from the geometry's and material's dispose events. A fish is
+		// built fresh per hook, so without this a three-minute run orphans well
+		// over a hundred geometries, and a session of back-to-back runs without a
+		// reload climbs until it stutters. Which then gets blamed on the water.
+		this.hookedMesh.traverse((o) => {
+			if (o.geometry) o.geometry.dispose()
+			if (o.material) {
+				for (const m of Array.isArray(o.material) ? o.material : [o.material]) m.dispose()
+			}
+		})
+		this.hookedMesh = null
 	}
 
 	_updateFishing(dt) {
@@ -711,10 +743,22 @@ class Game {
 					this.audio.surge()
 					this.fx.ringBurst(this.rod.bobber.clone(), 0xc8dcd4, 0.5)
 				}
-				this.hud.setFight(f.tension, f.progress, f.danger)
+				// One cue per telegraph, not one per frame.
+				if (f.warning && !this._warned) {
+					this._warned = true
+					this.audio.brace()
+				} else if (!f.warning) {
+					this._warned = false
+				}
+
+				this.hud.setFight(f.tension, f.progress, f.danger, f.warning)
 				this.hud.prompt(
-					f.running ? "IT'S RUNNING — EASE OFF" : "REEL IN THE LULL",
-					f.running ? "" : p.isTouch ? "HOLD" : "HOLD",
+					f.warning
+						? "IT'S ABOUT TO GO — LET GO NOW"
+						: f.running
+							? "RIDE IT OUT"
+							: "REEL IN THE LULL",
+					f.warning || f.running ? "" : "HOLD",
 				)
 
 				if (this.hookedMesh) {

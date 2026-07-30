@@ -1,11 +1,29 @@
 // Species, bite tells, and the fight.
 //
-// The fight is the point of this game, so it is worth stating the rule it is
-// built around: TENSION RISES WHILE YOU REEL AND WHILE THE FISH RUNS, AND ONLY
-// FALLS WHEN YOU LET GO. That single asymmetry produces the whole skill —
-// reel during the lulls, ease off during the runs, and go into every run with
-// enough slack in the bar to survive it. Nothing in Nova plays like this: there
-// the input is aggression, here it is restraint.
+// The fight is the point of this game, so it is worth stating the rules it is
+// built around:
+//
+//   1. TENSION RISES WHILE YOU REEL AND WHILE THE FISH RUNS, AND ONLY FALLS
+//      WHEN YOU LET GO.
+//   2. A RUN STARTS WITH A SHOCK, AND THE FISH TELLS YOU IT IS COMING.
+//
+// Rule 2 exists because rule 1 alone is not a skill. Without it, releasing the
+// button recovers tension several times faster than any run can add it, so
+// "reel below a threshold, release above it" — a thermostat that never even
+// looks at whether the fish is running — lands every fish in the lake, and
+// slightly faster than playing properly. There is no anticipation to reward if
+// runs arrive unannounced, so watching the fish would be strictly pointless.
+//
+// So each run is preceded by a short telegraph (`warn`), and the moment the run
+// begins the line takes an instant hit (`surge`). A shock cannot be reacted to,
+// only prepared for: the player who sees the telegraph and lets go arrives at
+// the run with slack and rides it out, while the thermostat holding at its
+// threshold eats the surge and snaps. Playing blind is still possible, but only
+// by holding a much lower threshold — which means far less reeling, a longer
+// fight, and fewer fish inside the three minutes.
+//
+// Nothing in Nova plays like this: there the input is aggression, here it is
+// restraint plus attention.
 //
 // Two deliberate balance choices worth not "fixing" later without thinking:
 //
@@ -41,20 +59,25 @@ export const SPECIES = {
 		w1: 6,
 		// tell: a flurry of tiny taps, then it takes it. Twitchy and easy to
 		// misread as a fish already hooked.
-		tell: { taps: 5, tapMs: 105, gapMs: 95, sink: 0.05, windowMs: 300 },
+		tell: { taps: 5, tapMs: 105, gapMs: 95, sink: 0.13, windowMs: 300 },
 		// Deliberately forgiving. This is the fish a beginner catches while still
 		// working out what the button does, so holding the reel down has to work —
 		// a sunfish that snaps teaches nothing except that the game is unfair.
 		// Every other species punishes that, which is where the learning happens.
 		fight: {
 			pull: 0.2,
-			reelTension: 0.08,
+			reelTension: 0.22,
 			ease: 0.62,
 			runTake: 1.6,
-			reelRate: 6.5,
+			reelRate: 9.0,
 			runDur: [0.3, 0.6],
 			restDur: [1.1, 1.7],
 			stamina: 8,
+			// seconds of telegraph before a run, and the instant tension hit
+			// when it starts — see the header. Bigger fish announce it for longer
+			// and hit harder, so they are readable but unforgiving if you are not.
+			warn: 0.30,
+			surge: 0.05,
 		},
 	},
 	perch: {
@@ -65,16 +88,21 @@ export const SPECIES = {
 		belly: 0xe6d79a,
 		w0: 31,
 		w1: 17,
-		tell: { taps: 2, tapMs: 150, gapMs: 150, sink: 0.09, windowMs: 320 },
+		tell: { taps: 2, tapMs: 150, gapMs: 150, sink: 0.19, windowMs: 320 },
 		fight: {
-			pull: 0.42,
-			reelTension: 0.3,
-			ease: 0.6,
+			pull: 0.5,
+			reelTension: 0.46,
+			ease: 0.66,
 			runTake: 1.7,
 			reelRate: 6.2,
 			runDur: [0.4, 0.9],
 			restDur: [1.0, 1.6],
 			stamina: 11,
+			// seconds of telegraph before a run, and the instant tension hit
+			// when it starts — see the header. Bigger fish announce it for longer
+			// and hit harder, so they are readable but unforgiving if you are not.
+			warn: 0.34,
+			surge: 0.34,
 		},
 	},
 	bass: {
@@ -86,16 +114,21 @@ export const SPECIES = {
 		w0: 13,
 		w1: 30,
 		// one committed thump — miss it and there is no second chance
-		tell: { taps: 1, tapMs: 260, gapMs: 120, sink: 0.16, windowMs: 340 },
+		tell: { taps: 1, tapMs: 260, gapMs: 120, sink: 0.26, windowMs: 340 },
 		fight: {
-			pull: 0.56,
-			reelTension: 0.38,
-			ease: 0.58,
+			pull: 0.52,
+			reelTension: 0.56,
+			ease: 0.64,
 			runTake: 2.2,
-			reelRate: 6,
+			reelRate: 6.0,
 			runDur: [0.6, 1.2],
 			restDur: [1.1, 1.8],
 			stamina: 14,
+			// seconds of telegraph before a run, and the instant tension hit
+			// when it starts — see the header. Bigger fish announce it for longer
+			// and hit harder, so they are readable but unforgiving if you are not.
+			warn: 0.40,
+			surge: 0.38,
 		},
 	},
 	pike: {
@@ -107,16 +140,21 @@ export const SPECIES = {
 		w0: 3.4,
 		w1: 30,
 		// no taps at all — the float just leans over and keeps going
-		tell: { taps: 1, tapMs: 620, gapMs: 100, sink: 0.24, windowMs: 420 },
+		tell: { taps: 1, tapMs: 620, gapMs: 100, sink: 0.32, windowMs: 420 },
 		fight: {
-			pull: 0.66,
-			reelTension: 0.44,
-			ease: 0.56,
+			pull: 0.5,
+			reelTension: 0.64,
+			ease: 0.62,
 			runTake: 2.5,
 			reelRate: 5.6,
 			runDur: [1.0, 1.7],
 			restDur: [1.3, 2.1],
 			stamina: 19,
+			// seconds of telegraph before a run, and the instant tension hit
+			// when it starts — see the header. Bigger fish announce it for longer
+			// and hit harder, so they are readable but unforgiving if you are not.
+			warn: 0.45,
+			surge: 0.41,
 		},
 	},
 	sturgeon: {
@@ -128,16 +166,21 @@ export const SPECIES = {
 		w0: 0.25,
 		w1: 15,
 		// the slowest tell in the lake: it sinks, and sinks, and sinks
-		tell: { taps: 1, tapMs: 900, gapMs: 120, sink: 0.34, windowMs: 480 },
+		tell: { taps: 1, tapMs: 900, gapMs: 120, sink: 0.4, windowMs: 480 },
 		fight: {
-			pull: 0.72,
-			reelTension: 0.5,
-			ease: 0.55,
+			pull: 0.5,
+			reelTension: 0.72,
+			ease: 0.6,
 			runTake: 2.6,
 			reelRate: 5.2,
 			runDur: [1.2, 2.0],
 			restDur: [1.6, 2.6],
 			stamina: 26,
+			// seconds of telegraph before a run, and the instant tension hit
+			// when it starts — see the header. Bigger fish announce it for longer
+			// and hit harder, so they are readable but unforgiving if you are not.
+			warn: 0.50,
+			surge: 0.44,
 		},
 	},
 }
@@ -235,12 +278,19 @@ export class Bite {
 	bobberSink() {
 		const tell = this.tell
 		if (this.t < this.commitAt) {
-			const into = this.t % this.tapPeriod
 			const tapSecs = tell.tapMs / 1000
-			if (into > tapSecs) return 0
-			// A smooth down-and-up rather than a square pulse, so slow tells read
-			// as a lean and fast ones as a flick.
-			return Math.sin((into / tapSecs) * Math.PI) * tell.sink
+			const index = Math.floor(this.t / this.tapPeriod)
+			const into = this.t % this.tapPeriod
+			const isLast = index >= tell.taps - 1
+			if (into <= tapSecs) {
+				const k = into / tapSecs
+				// A smooth down-and-up rather than a square pulse, so slow tells read
+				// as a lean and fast ones as a flick. The FINAL tap doesn't come back
+				// up: it leans over and stays leaning, which is what the single-tap
+				// species are described as doing and what the player is watching for.
+				return Math.sin(Math.min(isLast ? k * 0.5 : k, 1) * Math.PI) * tell.sink
+			}
+			return isLast ? tell.sink : 0
 		}
 		// Committed: it goes under and stays under.
 		const into = this.t - this.commitAt
@@ -277,22 +327,37 @@ export class Fight {
 		return this.state === "run"
 	}
 
+	/** The fish is about to go. Let go now. */
+	get warning() {
+		return this.state === "warn"
+	}
+
 	/** 0..1 how far in this fight is, for the HUD's line meter. */
 	get progress() {
 		return clamp(1 - this.line / this.startLine, 0, 1)
 	}
 
+	/** rest → warn → run → rest. The warn state is the whole skill gate. */
 	_nextState() {
 		const f = this.f
 		if (this.state === "run") {
 			this.state = "rest"
 			// A tired fish rests longer, which is what lets a patient player win.
 			this.stateT = rand(f.restDur[0], f.restDur[1]) * (1 + 0.6 * this.fatigue)
+		} else if (this.state === "rest") {
+			// Telegraph: the fish gathers itself. It is not pulling yet, so this is
+			// free time to let go — the only warning you get, and the reason
+			// watching the fish beats watching only the bar.
+			this.state = "warn"
+			this.stateT = f.warn * (1 + 0.25 * this.fatigue)
+			this.angle += rand(-0.5, 0.5)
 		} else {
 			this.state = "run"
 			this.stateT = rand(f.runDur[0], f.runDur[1]) * (1 - 0.3 * this.fatigue)
+			// The shock. Instant, so it cannot be reacted to — only arrived at with
+			// enough slack. A tired fish hits softer.
+			this.tension = clamp(this.tension + f.surge * (1 - 0.4 * this.fatigue), 0, 1)
 			this.surged = true
-			this.angle += rand(-0.8, 0.8)
 		}
 	}
 
@@ -318,9 +383,18 @@ export class Fight {
 
 		// The asymmetry that makes this a game: reeling always costs tension, and
 		// tension only comes off while the button is up.
+		//
+		// Line comes in faster when the line is tighter. This is what makes
+		// reading the fish PAY rather than merely be safer: a thermostat hovers at
+		// whatever threshold it holds and spends the same fraction of its time
+		// reeling regardless of where that threshold is — duty cycle is set by
+		// ease/reelTension, not by the threshold — so without this, a cautious
+		// blind player finished just as fast as an attentive one. Tying progress to
+		// tension means the headroom that reading the telegraph buys you is
+		// headroom you can actually spend.
 		if (reeling) {
 			this.tension += (f.reelTension + (running ? pull : 0)) * dt
-			this.line -= f.reelRate * dt
+			this.line -= f.reelRate * (0.45 + 1.1 * this.tension) * dt
 		} else {
 			this.tension += ((running ? pull : 0) - f.ease) * dt
 		}

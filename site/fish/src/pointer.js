@@ -34,37 +34,52 @@ export class Pointer {
 			this.ny = -(((clientY - r.top) / r.height) * 2 - 1)
 		}
 
-		const press = () => {
+		// Which sources are currently holding the button down. Counted rather than
+		// a single flag because mouse, touch and Space are all aliases for the same
+		// button: without this, resting a hand on Space while reeling with the
+		// mouse would release the reel on keyup even though the mouse was still
+		// held, and lifting a second finger would drop a touch hold. Mid-fight that
+		// reads as the game ignoring the button.
+		const held = new Set()
+
+		const press = (source) => {
+			held.add(source)
 			if (this.down) return
 			this.down = true
 			this.pressed = true
 			this._downAt = performance.now()
 		}
 
-		const release = () => {
-			if (!this.down) return
+		const release = (source) => {
+			held.delete(source)
+			if (!this.down || held.size > 0) return
 			this.down = false
 			this.released = true
 			this._holdMs = performance.now() - this._downAt
 		}
 
+		const releaseAll = () => {
+			held.clear()
+			release("*")
+		}
+
 		canvas.addEventListener("mousemove", (e) => move(e.clientX, e.clientY))
 		canvas.addEventListener("mousedown", (e) => {
-			if (e.button === 0) press()
+			if (e.button === 0) press("mouse")
 		})
 		// mouseup on window, not the canvas: releasing outside the canvas must
 		// still count, or the rod stays wound up forever.
 		addEventListener("mouseup", (e) => {
-			if (e.button === 0) release()
+			if (e.button === 0) release("mouse")
 		})
-		addEventListener("blur", () => release())
+		addEventListener("blur", () => releaseAll())
 
 		canvas.addEventListener(
 			"touchstart",
 			(e) => {
 				const t = e.changedTouches[0]
 				move(t.clientX, t.clientY)
-				press()
+				press("touch")
 				e.preventDefault()
 			},
 			{ passive: false },
@@ -78,7 +93,9 @@ export class Pointer {
 			{ passive: false },
 		)
 		const endTouch = (e) => {
-			release()
+			// Only when the last finger leaves — a second finger lifting must not
+			// drop the hold.
+			if (e.touches.length === 0) release("touch")
 			e.preventDefault()
 		}
 		canvas.addEventListener("touchend", endTouch, { passive: false })
@@ -88,25 +105,19 @@ export class Pointer {
 		// from the keyboard too.
 		addEventListener("keydown", (e) => {
 			if (e.code === "Space" && !e.repeat) {
-				press()
-				e.preventDefault()
+				press("key")
+				// Only swallow the key while a run is actually in progress, so Space
+				// can still activate a focused button on the menus.
+				if (document.getElementById("hud") && !document.getElementById("hud").classList.contains("hidden")) {
+					e.preventDefault()
+				}
 			}
 		})
 		addEventListener("keyup", (e) => {
-			if (e.code === "Space") release()
+			if (e.code === "Space") release("key")
 		})
 
 		addEventListener("contextmenu", (e) => e.preventDefault())
-	}
-
-	/** How long the button was held, in seconds, for the release just consumed. */
-	get holdSeconds() {
-		return this._holdMs / 1000
-	}
-
-	/** Seconds the button has been held so far, for a charge that is still building. */
-	get holdingSeconds() {
-		return this.down ? (performance.now() - this._downAt) / 1000 : 0
 	}
 
 	/** Call at the very end of a frame. */
