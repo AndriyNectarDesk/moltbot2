@@ -161,7 +161,8 @@ body {
 	align-items: center;
 	gap: 16px;
 	padding: 12px 16px;
-	background: linear-gradient(180deg, rgba(8, 4, 20, 0.75), transparent);
+	background: linear-gradient(180deg, rgba(8, 4, 20, 0.88), rgba(8, 4, 20, 0.45) 70%, transparent);
+	text-shadow: 0 1px 6px rgba(0, 0, 0, 0.85);
 }
 
 #mode {
@@ -275,8 +276,9 @@ body {
 	width: 210px;
 	padding: 9px 12px;
 	border-radius: 6px;
-	background: rgba(14, 8, 32, 0.78);
-	border: 1px solid rgba(255, 200, 87, 0.35);
+	background: rgba(10, 6, 24, 0.92);
+	border: 1px solid rgba(255, 200, 87, 0.55);
+	box-shadow: 0 6px 22px rgba(0, 0, 0, 0.55);
 }
 
 #job-kind {
@@ -312,15 +314,17 @@ body {
 }
 
 /* ============================ WAYPOINT ============================ */
+/* Parked well above the horizon rather than in the middle of the screen. It used
+   to sit exactly where the road you are driving into appears, which is the one
+   place a large opaque arrow must not be. */
 #arrow {
 	position: absolute;
-	top: 50%;
+	top: 96px;
 	left: 50%;
-	transform: translate(-50%, -50%);
-	width: 92px;
-	height: 92px;
-	margin-top: -40px;
-	opacity: 0.85;
+	transform: translateX(-50%);
+	width: 56px;
+	height: 56px;
+	opacity: 0.9;
 }
 
 #arrow svg {
@@ -343,7 +347,7 @@ body {
 
 #arrow-dist {
 	position: absolute;
-	bottom: -14px;
+	bottom: -13px;
 	left: 50%;
 	transform: translateX(-50%);
 	font-size: 11px;
@@ -362,12 +366,13 @@ body {
 }
 
 #speed-bar {
-	width: 150px;
-	height: 6px;
-	border-radius: 3px;
-	background: rgba(255, 255, 255, 0.13);
+	width: 168px;
+	height: 8px;
+	border-radius: 4px;
+	background: rgba(8, 4, 20, 0.7);
+	border: 1px solid rgba(255, 255, 255, 0.25);
 	overflow: hidden;
-	margin-bottom: 5px;
+	margin-bottom: 6px;
 }
 
 #speed-fill {
@@ -386,11 +391,13 @@ body {
 }
 
 #speed {
-	font-size: 34px;
+	font-size: 40px;
 	font-weight: 700;
 	letter-spacing: 1px;
 	color: #fff;
-	text-shadow: 0 0 18px rgba(54, 200, 216, 0.4);
+	/* A hard dark halo, not a glow. The road behind this is now bright, and a
+	   soft cyan bloom over a light surface is unreadable. */
+	text-shadow: 0 2px 10px rgba(0, 0, 0, 0.95), 0 0 3px rgba(0, 0, 0, 0.9);
 }
 
 #gear {
@@ -432,7 +439,7 @@ body {
 	font-weight: 700;
 	letter-spacing: 3px;
 	color: #fff;
-	text-shadow: 0 2px 24px rgba(0, 0, 0, 0.8);
+	text-shadow: 0 3px 18px rgba(0, 0, 0, 0.95), 0 0 4px rgba(0, 0, 0, 0.9);
 }
 
 .pop.good {
@@ -460,7 +467,7 @@ body {
 
 .toast {
 	position: absolute;
-	top: 62px;
+	top: 164px;
 	left: 50%;
 	transform: translateX(-50%);
 	font-size: 11px;
@@ -468,8 +475,9 @@ body {
 	padding: 6px 16px;
 	border-radius: 4px;
 	color: rgba(255, 255, 255, 0.82);
-	background: rgba(14, 8, 32, 0.8);
-	border: 1px solid rgba(255, 255, 255, 0.14);
+	background: rgba(10, 6, 24, 0.92);
+	border: 1px solid rgba(255, 255, 255, 0.2);
+	box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5);
 	white-space: nowrap;
 	max-width: 90vw;
 	overflow: hidden;

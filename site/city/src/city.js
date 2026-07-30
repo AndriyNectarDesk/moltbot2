@@ -26,6 +26,16 @@ export const CITY_HALF = (BLOCKS * BLOCK) / 2
 const NEON = [0xff3d8b, 0x36c8d8, 0xffc857, 0x8a5cff, 0x4ce0a0]
 
 /**
+ * How dark the "night" end of the cycle is allowed to get.
+ *
+ * Both ends deliberately sit in the lit half. This is a driving game before it is
+ * a mood piece: if you cannot see the junction you are about to arrive at, none
+ * of the rest of it matters.
+ */
+const NIGHT_MIN = 0.1
+const NIGHT_MAX = 0.62
+
+/**
  * The city is generated from a FIXED seed, so it is the same city every time.
  *
  * This matters more than it looks. Without it every reload rebuilt the whole map
@@ -68,14 +78,14 @@ function facadeTexture() {
 	const h = (S - pad * (rows + 1)) / rows
 	for (let i = 0; i < cols; i++) {
 		for (let j = 0; j < rows; j++) {
-			const lit = Math.random() < 0.42
+			const lit = Math.random() < 0.55
 			if (lit) {
 				const warm = Math.random() < 0.7
 				x.fillStyle = warm
 					? `rgba(255,${randInt(190, 225)},${randInt(120, 165)},${rand(0.5, 0.95).toFixed(2)})`
 					: `rgba(${randInt(120, 180)},${randInt(220, 250)},255,${rand(0.4, 0.85).toFixed(2)})`
 			} else {
-				x.fillStyle = `rgba(${randInt(22, 40)},${randInt(26, 48)},${randInt(44, 70)},1)`
+				x.fillStyle = `rgba(${randInt(52, 78)},${randInt(58, 88)},${randInt(84, 122)},1)`
 			}
 			x.fillRect(pad + i * (w + pad), pad + j * (h + pad), w, h)
 		}
@@ -90,15 +100,18 @@ function facadeTexture() {
 function roadTexture() {
 	const S = 512
 	const { c, x } = makeCanvas(S)
-	x.fillStyle = "#14161f"
+	// Deliberately a mid grey rather than the near-black asphalt this started as.
+	// The road is most of the screen in a driving game and it has to read as a
+	// surface you can place the car on.
+	x.fillStyle = "#3a4050"
 	x.fillRect(0, 0, S, S)
 	for (let i = 0; i < 500; i++) {
-		x.fillStyle = `rgba(${randInt(24, 46)},${randInt(26, 50)},${randInt(34, 62)},0.5)`
+		x.fillStyle = `rgba(${randInt(58, 92)},${randInt(62, 98)},${randInt(74, 116)},0.5)`
 		x.fillRect(rand(0, S), rand(0, S), rand(2, 26), rand(2, 26))
 	}
-	// centre line
-	x.strokeStyle = "rgba(240,215,140,0.5)"
-	x.lineWidth = 4
+	// centre line — bright, because it is the main cue for where the lane is
+	x.strokeStyle = "rgba(255,232,160,0.95)"
+	x.lineWidth = 6
 	x.setLineDash([26, 22])
 	x.beginPath()
 	x.moveTo(S / 2, 0)
@@ -389,10 +402,13 @@ export class City {
 	}
 
 	_buildLights() {
-		this.scene.add(new THREE.AmbientLight(0x3b4a6b, 0.7))
-		this.hemi = new THREE.HemisphereLight(0x8fb6e8, 0x241a33, 0.55)
+		// A generous ambient floor. Shadowed sides of buildings and the far end of
+		// a street still have to be legible, and one directional light plus a hemi
+		// leaves them pitch black without this.
+		this.scene.add(new THREE.AmbientLight(0x7d90bb, 1.15))
+		this.hemi = new THREE.HemisphereLight(0xbcd4f2, 0x4a4060, 1.05)
 		this.scene.add(this.hemi)
-		this.sun = new THREE.DirectionalLight(0xffd2a8, 1.1)
+		this.sun = new THREE.DirectionalLight(0xffd2a8, 1.8)
 		this.sun.position.set(70, 90, 40)
 		this.sun.castShadow = true
 		const d = CITY_HALF * 0.8
@@ -424,7 +440,7 @@ export class City {
 		}
 		this.scene.add(this.lampGroup)
 
-		this.scene.fog = new THREE.Fog(0x0d1120, BLOCK * 2.2, BLOCK * 6)
+		this.scene.fog = new THREE.Fog(0x39415c, BLOCK * 3.4, BLOCK * 9)
 	}
 
 	// ------------------------------------------------------------ queries
@@ -516,16 +532,24 @@ export class City {
 
 	update(dt) {
 		this.time += dt
-		// A full day in six minutes: long enough that it isn't a strobe, short
-		// enough that a kid sees both ends of it in one sitting.
-		this.night = 0.5 - 0.5 * Math.cos((this.time / 360) * TAU + Math.PI * 1.24)
+		// A slow drift from late afternoon to early evening and back — a mood, not
+		// a light switch.
+		//
+		// The first version ran the full 0..1 and started at 0.87, i.e. the middle
+		// of the night with the sun at 17%: the roads were invisible and the game
+		// was unplayable from the first frame. A driving game has to let you see
+		// the road, so the cycle now lives entirely in the lit half and every light
+		// has a floor well above black. You still get gold-hour and blue-hour, the
+		// neon still reads, and it is never dark enough to lose a junction in.
+		const cycle = 0.5 - 0.5 * Math.cos((this.time / 300) * TAU + Math.PI * 0.55)
+		this.night = lerp(NIGHT_MIN, NIGHT_MAX, cycle)
 
 		const n = this.night
-		this.sun.intensity = lerp(1.5, 0.06, n)
-		this.sun.color.setHSL(lerp(0.11, 0.62, n), lerp(0.55, 0.35, n), lerp(0.62, 0.4, n))
-		this.hemi.intensity = lerp(0.85, 0.32, n)
-		this.hemi.color.setHSL(lerp(0.56, 0.66, n), 0.4, lerp(0.62, 0.22, n))
-		this.scene.fog.color.setHSL(lerp(0.58, 0.68, n), lerp(0.25, 0.5, n), lerp(0.52, 0.055, n))
+		this.sun.intensity = lerp(2.1, 0.95, n)
+		this.sun.color.setHSL(lerp(0.09, 0.58, n), lerp(0.5, 0.42, n), lerp(0.66, 0.58, n))
+		this.hemi.intensity = lerp(1.15, 0.85, n)
+		this.hemi.color.setHSL(lerp(0.55, 0.62, n), 0.38, lerp(0.68, 0.46, n))
+		this.scene.fog.color.setHSL(lerp(0.57, 0.65, n), lerp(0.24, 0.4, n), lerp(0.58, 0.3, n))
 		// The lamps and neon only really earn their keep after dark.
 		if (this._lampsAllowed !== false) this.lampGroup.visible = n > 0.28
 		const spin = this.time * 1.6
@@ -539,9 +563,11 @@ export class City {
 	/** Sky colour for the renderer's clear colour. */
 	skyColour(target) {
 		return target.setHSL(
-			lerp(0.57, 0.68, this.night),
-			lerp(0.4, 0.55, this.night),
-			lerp(0.6, 0.045, this.night),
+			lerp(0.57, 0.65, this.night),
+			lerp(0.42, 0.55, this.night),
+			// Floored well above black: the sky is the backdrop the skyline reads
+			// against, and a black sky behind dark buildings is just a black screen.
+			lerp(0.62, 0.26, this.night),
 		)
 	}
 }
