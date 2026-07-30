@@ -1,6 +1,6 @@
 // Fully procedural audio — no sample files, everything is synthesised with WebAudio.
 
-import { clamp, rand } from "./util.js"
+import { clamp, rand } from "../../shared/util.js"
 
 export class Audio {
 	constructor() {

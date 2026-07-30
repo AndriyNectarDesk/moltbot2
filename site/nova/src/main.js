@@ -6,9 +6,9 @@ import { RenderPass } from "three/addons/postprocessing/RenderPass.js"
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js"
 
-import { clamp, damp, lerp, rand, TAU } from "./util.js"
+import { clamp, damp, lerp, rand, TAU } from "../../shared/util.js"
 import { Audio } from "./audio.js"
-import { Input } from "./input.js"
+import { Input } from "../../shared/input.js"
 import { World } from "./world.js"
 import { FX } from "./fx.js"
 import { Hero } from "./hero.js"
@@ -16,7 +16,7 @@ import { Projectiles, Pickups } from "./projectiles.js"
 import { HUD } from "./hud.js"
 import { Quality, PRESETS } from "./quality.js"
 import { TouchControls } from "./touch.js"
-import { Leaderboard, cleanName } from "./leaderboard.js"
+import { GUEST, Leaderboard } from "../../shared/leaderboard.js"
 import { Brute, Lancer, MoltbotPrime, Skitter, Zipper } from "./enemies.js"
 
 const $ = (id) => document.getElementById(id)
@@ -58,7 +58,7 @@ class Game {
 		this.autoFire = this.isTouch
 		this.aimHostile = false
 		this.hud = new HUD()
-		this.board = new Leaderboard()
+		this.board = new Leaderboard("nova")
 
 		this.world = new World(this.scene)
 		this.fx = new FX(this.scene)
@@ -189,54 +189,7 @@ class Game {
 		opt("opt-invert", "invertY", (v) => (this.input.invertY = v))
 		opt("opt-sens", "sens", (v) => (this.input.sensitivity = v / 100))
 
-		const submitBtn = $("btn-submit")
-		const nameInput = $("go-name")
-		submitBtn.onclick = async () => {
-			if (this._submitted) return
-			const name = cleanName(nameInput.value)
-			const msg = $("go-submit-msg")
-			if (!name) {
-				msg.textContent = "ENTER A NAME FIRST"
-				msg.classList.add("warn")
-				nameInput.focus()
-				return
-			}
-			this._submitted = true
-			this.board.setName(name)
-			nameInput.value = name
-			submitBtn.disabled = true
-			submitBtn.textContent = "POSTING…"
-			msg.classList.remove("warn")
-			msg.textContent = ""
-
-			const res = await this.board.submit({
-				score: this.score,
-				wave: this.wave,
-				kills: this.kills,
-				combo: this.bestCombo,
-			})
-			submitBtn.textContent = "POSTED"
-			this._renderBoard($("go-board"), res.entries.slice(0, 8), {
-				shared: res.shared,
-				highlightAt: res.rank,
-				title: "TOP RUNS",
-			})
-			if (res.rank === 1) {
-				msg.textContent = res.shared ? "NEW WORLD RECORD" : "NEW PERSONAL BEST"
-			} else if (res.rank) {
-				msg.textContent = `RANK #${res.rank}`
-			}
-			if (!res.shared && this.board.shared) {
-				// Configured for a shared board but we couldn't reach it.
-				msg.textContent = "SAVED ON THIS DEVICE — BOARD UNREACHABLE"
-				msg.classList.add("warn")
-			}
-			this.refreshTitleBoard()
-		}
-		nameInput.addEventListener("keydown", (e) => {
-			e.stopPropagation()
-			if (e.key === "Enter") submitBtn.click()
-		})
+		this._bindSubmit()
 
 		const pauseBtn = $("btn-pause")
 		if (pauseBtn) pauseBtn.onclick = () => (this.state === "playing" ? this.pause() : this.resume())
@@ -264,6 +217,115 @@ class Game {
 		}
 	}
 
+	/**
+	 * Wire the game-over submit row: who you are, then your PIN, then post.
+	 *
+	 * The order matters for feel. You never touch either of these to PLAY — the
+	 * roster is remembered and the PIN is asked once per device, here, after
+	 * you've already had your run. A guest needs neither.
+	 */
+	_bindSubmit() {
+		const submitBtn = $("btn-submit")
+		const pinInput = $("go-pin")
+		const msg = $("go-submit-msg")
+
+		const paintRoster = () => {
+			for (const btn of document.querySelectorAll(".who")) {
+				btn.classList.toggle("on", btn.dataset.who === (this.board.name || GUEST))
+			}
+			// A guest plays for themselves; there's nothing to prove.
+			const guest = !this.board.isRostered
+			$("go-pin-wrap").classList.toggle("hidden", guest)
+			submitBtn.textContent = guest ? "SAVE HERE" : "POST SCORE"
+		}
+
+		for (const btn of document.querySelectorAll(".who")) {
+			btn.onclick = () => {
+				const who = btn.dataset.who
+				if (who !== this.board.name) this.board.forgetPin()
+				this.board.setName(who === GUEST ? "" : who)
+				pinInput.value = this.board.pin
+				msg.textContent = ""
+				msg.classList.remove("warn")
+				paintRoster()
+			}
+		}
+
+		pinInput.value = this.board.pin
+		pinInput.addEventListener("keydown", (e) => {
+			e.stopPropagation()
+			if (e.key === "Enter") submitBtn.click()
+		})
+
+		submitBtn.onclick = async () => {
+			if (this._submitted) return
+
+			if (this.board.isRostered) {
+				const pin = pinInput.value.trim()
+				if (!pin) {
+					msg.textContent = "ENTER YOUR PIN"
+					msg.classList.add("warn")
+					pinInput.focus()
+					return
+				}
+				this.board.setPin(pin)
+			}
+
+			this._submitted = true
+			submitBtn.disabled = true
+			submitBtn.textContent = "POSTING…"
+			msg.classList.remove("warn")
+			msg.textContent = ""
+
+			const res = await this.board.submit({
+				score: this.score,
+				stats: { wave: this.wave, kills: this.kills, combo: this.bestCombo },
+				durationMs: this.runMs,
+			})
+
+			this._renderBoard($("go-board"), res.entries.slice(0, 8), {
+				shared: res.shared,
+				highlightAt: res.rank,
+				title: "TOP RUNS",
+			})
+
+			if (res.ok) {
+				submitBtn.textContent = res.shared ? "POSTED" : "SAVED"
+				if (res.rank === 1) {
+					msg.textContent = res.shared ? "TOP OF THE WEEK" : "NEW PERSONAL BEST"
+				} else if (res.rank) {
+					msg.textContent = `RANK #${res.rank}`
+				}
+				if (res.shared && res.points) {
+					msg.textContent += ` · ${res.points} PRIZE ${res.points === 1 ? "POINT" : "POINTS"}`
+				}
+			} else {
+				// Say what actually went wrong. A rejected PIN used to be reported
+				// as an unreachable board, which sent you hunting the wrong fault.
+				submitBtn.textContent = "SAVED HERE"
+				msg.classList.add("warn")
+				if (res.status === 403) {
+					msg.textContent = "WRONG PIN — SAVED ON THIS DEVICE"
+					this.board.forgetPin()
+					pinInput.value = ""
+					// Let them fix it and try again rather than locking the screen.
+					this._submitted = false
+					submitBtn.disabled = false
+					submitBtn.textContent = "POST SCORE"
+				} else if (res.status === 429) {
+					msg.textContent = "TOO SOON — SAVED ON THIS DEVICE"
+				} else if (res.status === 409) {
+					msg.textContent = "THIS WEEK IS CLOSED — SAVED ON THIS DEVICE"
+				} else {
+					msg.textContent = "SAVED ON THIS DEVICE — BOARD UNREACHABLE"
+				}
+			}
+			this.refreshTitleBoard()
+		}
+
+		paintRoster()
+	}
+
 	/** Paint a score table into a container. */
 	_renderBoard(el, entries, { shared, highlightAt = null, title }) {
 		if (!el) return
@@ -275,12 +337,13 @@ class Game {
 		const rows = entries
 			.map((e, i) => {
 				const you = highlightAt === i + 1 ? " you" : ""
-				const name = String(e.name || "ANON").replace(/[<>&]/g, "")
+				const name = String(e.player || e.name || "ANON").replace(/[<>&]/g, "")
+				const wave = (e.stats && e.stats.wave) || e.wave
 				return (
 					`<div class="board-row top-${i + 1}${you}">` +
 					`<span class="rk">${i + 1}</span>` +
-					`<span class="nm">${name}</span>` +
-					`<span class="wv">W${e.wave}</span>` +
+					`<span class="nm">${name.toUpperCase()}</span>` +
+					`<span class="wv">${wave ? `W${wave}` : ""}</span>` +
 					`<span class="sc">${Number(e.score).toLocaleString()}</span>` +
 					`</div>`
 				)
@@ -343,6 +406,7 @@ class Game {
 		this.audio.resume()
 		this.audio.setEnabled(this.options.audio)
 		this.resetRun()
+		this.runStartedAt = Date.now()
 		this.state = "playing"
 		$("title").classList.add("hidden")
 		$("gameover").classList.add("hidden")
@@ -401,13 +465,17 @@ class Game {
 		$("go-title").textContent = this.wave >= 10 ? "HERO DOWN" : "DOWN BUT NOT OUT"
 		$("gameover").classList.remove("hidden")
 
-		// Pre-fill the remembered name and reset the form for this run.
-		const nameInput = $("go-name")
-		nameInput.value = this.board.name
+		// How long the run actually took. Only used as a flag signal on the
+		// board — a huge score in a few seconds contradicts itself.
+		this.runMs = this.runStartedAt ? Date.now() - this.runStartedAt : undefined
+
+		// Reset the submit form for this run; the roster pick and PIN persist.
+		$("go-pin").value = this.board.pin
 		$("go-submit-msg").textContent = ""
 		$("go-submit-msg").classList.remove("warn")
 		$("btn-submit").disabled = false
-		$("btn-submit").textContent = "POST SCORE"
+		$("btn-submit").textContent = this.board.isRostered ? "POST SCORE" : "SAVE HERE"
+		$("go-pin-wrap").classList.toggle("hidden", !this.board.isRostered)
 		this._submitted = false
 		this.board.top(8).then(({ entries, shared }) =>
 			this._renderBoard($("go-board"), entries, { shared, title: "TOP RUNS" }),

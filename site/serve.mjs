@@ -1,10 +1,12 @@
 #!/usr/bin/env node
-// Tiny zero-dependency static server for the game.
-// The game is plain ES modules with three.js vendored under game/vendor, so it
-// needs no bundler — it just has to be served over http:// (ES modules and
+// Tiny zero-dependency static server for the whole site.
+// The games are plain ES modules with three.js vendored under site/vendor, so
+// there's no bundler — they just have to be served over http:// (ES modules and
 // importmaps don't work from file://).
 //
-//   node game/serve.mjs [port]
+//   node site/serve.mjs [port]
+//
+// Serves the hub at / and each game at /nova/, /fish/, /city/.
 
 import { createServer } from "node:http"
 import { readFile, stat } from "node:fs/promises"
@@ -31,20 +33,27 @@ const TYPES = {
 const server = createServer(async (req, res) => {
 	try {
 		const url = new URL(req.url, `http://${req.headers.host}`)
-		let path = decodeURIComponent(url.pathname)
-		if (path === "/") path = "/index.html"
+		const path = decodeURIComponent(url.pathname)
 
-		// keep every request inside the game directory
-		const target = join(ROOT, normalize(path).replace(/^(\.\.[/\\])+/, ""))
+		// keep every request inside the site directory
+		let target = join(ROOT, normalize(path).replace(/^(\.\.[/\\])+/, ""))
 		if (!target.startsWith(ROOT)) {
 			res.writeHead(403).end("Forbidden")
 			return
 		}
 
-		const info = await stat(target)
+		let info = await stat(target)
 		if (info.isDirectory()) {
-			res.writeHead(404).end("Not found")
-			return
+			// GitHub Pages does both of these for us, so without them the site
+			// works in production and 404s locally — a trap worth avoiding.
+			// The redirect matters most: /nova without the slash would make the
+			// document base /, and every ./relative import in the page would miss.
+			if (!path.endsWith("/")) {
+				res.writeHead(301, { Location: path + "/" }).end()
+				return
+			}
+			target = join(target, "index.html")
+			info = await stat(target)
 		}
 
 		const body = await readFile(target)
@@ -60,5 +69,5 @@ const server = createServer(async (req, res) => {
 })
 
 server.listen(PORT, HOST, () => {
-	console.log(`\n  DANYLO: NECTAR NOVA  →  http://${HOST}:${PORT}/\n`)
+	console.log(`\n  NECTAR ARCADE  →  http://${HOST}:${PORT}/\n`)
 })

@@ -1,15 +1,15 @@
 name: Deploy game to GitHub Pages
 
-# Publishes game/ (DANYLO: NECTAR NOVA) to GitHub Pages.
-# The game is plain static files — no build step, no dependencies — so this just
-# uploads the folder. `configure-pages` with enablement:true turns Pages on the
-# first time it runs, so there is nothing to click in repo settings.
+# Publishes site/ (the hub plus every game) to GitHub Pages.
+# The games are plain static files — no build step, no dependencies — so this
+# just uploads the folder. `configure-pages` with enablement:true turns Pages on
+# the first time it runs, so there is nothing to click in repo settings.
 
 on:
   push:
     branches: [main]
     paths:
-      - "game/**"
+      - "site/**"
       - ".github/workflows/deploy-game.yml"
   workflow_dispatch:
 
@@ -38,11 +38,41 @@ jobs:
         with:
           enablement: true
 
-      - name: Upload game/ as the Pages artifact
+      - name: Upload site/ as the Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: game
+          path: site
 
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
+
+      # The failure mode of a multi-game layout is "moved a file, forgot a
+      # path" — a game that 404s its own module loads to a black screen. One
+      # sweep catches the whole class, and fails the deploy instead of a kid.
+      - name: Check the deployed URLs resolve
+        run: |
+          base="${{ steps.deployment.outputs.page_url }}"
+          fail=0
+          for p in "" \
+                   nova/ \
+                   vendor/three.module.min.js \
+                   vendor/three.core.min.js \
+                   shared/base.css \
+                   shared/util.js \
+                   shared/input.js \
+                   shared/leaderboard.js \
+                   shared/config.js \
+                   hub.css \
+                   hub.js \
+                   nova/style.css \
+                   nova/src/main.js; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" --retry 3 --retry-delay 5 "$base$p")
+            if [ "$code" != "200" ]; then
+              echo "::error::$base$p returned $code"
+              fail=1
+            else
+              echo "ok   $p"
+            fi
+          done
+          exit $fail

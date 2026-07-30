@@ -3,7 +3,7 @@
 // These write straight into the existing Input instance, so the rest of the
 // game never learns whether a key or a thumb is driving it.
 
-import { clamp } from "./util.js"
+import { clamp } from "../../shared/util.js"
 
 const $ = (id) => document.getElementById(id)
 

@@ -2,7 +2,7 @@
 // All meshes are primitive-built and animated procedurally.
 
 import * as THREE from "three"
-import { clamp, damp, lerp, rand, TAU } from "./util.js"
+import { clamp, damp, lerp, rand, TAU } from "../../shared/util.js"
 
 const MAG = 0xff2d95
 const VIO = 0x8a3cff

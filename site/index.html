@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+		<title>NECTAR ARCADE</title>
+		<meta name="description" content="Three games, one weekly prize board. Danylo, Mike and Sofia." />
+		<meta name="theme-color" content="#160d2c" />
+		<link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+		<link rel="stylesheet" href="./shared/base.css" />
+		<link rel="stylesheet" href="./hub.css" />
+
+		<meta property="og:type" content="website" />
+		<meta property="og:title" content="NECTAR ARCADE" />
+		<meta property="og:description" content="Three games, one weekly prize board." />
+		<!-- absolute so link scrapers resolve it; update if you host elsewhere -->
+		<meta property="og:image" content="https://andriynectardesk.github.io/moltbot2/preview.png" />
+		<meta name="twitter:card" content="summary_large_image" />
+	</head>
+	<body class="hub">
+		<main>
+			<header>
+				<div class="t-kicker">NECTAR FORCE PRESENTS</div>
+				<h1 class="t-title"><span>ARCADE</span><em>THREE GAMES · ONE PRIZE</em></h1>
+			</header>
+
+			<section class="cards">
+				<a class="card live" href="./nova/">
+					<div class="card-art nova" aria-hidden="true"><i></i><i></i><i></i></div>
+					<div class="card-who">DANYLO</div>
+					<div class="card-name">NECTAR NOVA</div>
+					<div class="card-kind">3D arena shooter</div>
+					<div class="card-go">PLAY</div>
+				</a>
+
+				<div class="card soon">
+					<div class="card-art fish" aria-hidden="true"><i></i><i></i><i></i></div>
+					<div class="card-who">MIKE</div>
+					<div class="card-name">QUIET WATER</div>
+					<div class="card-kind">fishing · hold your nerve</div>
+					<div class="card-go">BUILDING</div>
+				</div>
+
+				<div class="card soon">
+					<div class="card-art city" aria-hidden="true"><i></i><i></i><i></i></div>
+					<div class="card-who">SOFIA</div>
+					<div class="card-name">CITY LIGHTS</div>
+					<div class="card-kind">open world · delivery jobs</div>
+					<div class="card-go">BUILDING</div>
+				</div>
+			</section>
+
+			<section class="prize">
+				<h2 class="prize-title">THIS WEEK</h2>
+				<p id="week-line" class="prize-sub">loading…</p>
+
+				<div id="joint" class="board"></div>
+
+				<div id="per-game" class="per-game"></div>
+
+				<details class="rules">
+					<summary>How the prize works</summary>
+					<div>
+						<p>
+							Every game has its own board that resets each week — Monday morning to
+							Sunday night. Win your game's board and you win that game's prize.
+						</p>
+						<p>
+							The joint board is different. In each game, first place is worth
+							<b>10</b> points, second <b>6</b>, third <b>3</b>, and just posting a
+							run is worth <b>1</b>. Add up your points from all three games and the
+							highest total wins the big prize — so playing your brother's or
+							sister's game is worth doing.
+						</p>
+						<p>
+							If only one person plays a game all week, that game only gives out
+							participation points. No free wins.
+						</p>
+						<p class="fine">
+							Scores come from your own computer, so Dad checks the board before
+							paying anyone — he can see how many times you posted, when, and if a
+							score jumped further than it should have.
+						</p>
+					</div>
+				</details>
+			</section>
+
+			<footer>
+				<span id="board-state" class="dim"></span>
+			</footer>
+		</main>
+
+		<script type="module" src="./hub.js"></script>
+	</body>
+</html>

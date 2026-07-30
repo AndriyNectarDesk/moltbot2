@@ -1,0 +1,464 @@
+/* ============================================================
+   Shared chrome for every game on the site.
+   ============================================================
+
+   Tokens, reset, the full-screen menu/pause/gameover shell, buttons,
+   option rows and the score table. Everything here is game-agnostic:
+   nothing in this file knows what a wave, a fish or a delivery is.
+
+   A game links this FIRST and then its own stylesheet, which is free to
+   override any of it — the neon look is carried entirely by the seven
+   colour vars below, so a game reskins itself by redeclaring :root.
+
+   Note this deliberately duplicates the corresponding blocks in
+   nova/style.css rather than replacing them. Nova is live and its
+   stylesheet is left byte-identical; cutting 550 lines out of a working
+   sheet risks a subtle cascade break and buys a player nothing. The
+   duplicated rules are identical, so load order doesn't matter. */
+
+:root {
+	--orange: #ff7a1a;
+	--orange-hot: #ffb347;
+	--cyan: #31e6ff;
+	--cyan-dim: #1b7f92;
+	--magenta: #ff2d95;
+	--violet: #8a3cff;
+	--ink: #07050f;
+	--hud-font: "Rajdhani", "Eurostile", "Bahnschrift", "DIN Alternate", "Segoe UI", system-ui, sans-serif;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	padding: 0;
+	height: 100%;
+	overflow: hidden;
+	background: #05040c;
+	color: #fff;
+	font-family: var(--hud-font);
+	-webkit-font-smoothing: antialiased;
+	user-select: none;
+	cursor: default;
+}
+
+#app {
+	position: fixed;
+	inset: 0;
+}
+
+#scene {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	display: block;
+}
+
+.hidden {
+	display: none !important;
+}
+
+/* ============================ SCREENS ============================ */
+.screen {
+	position: absolute;
+	inset: 0;
+	z-index: 30;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background:
+		radial-gradient(ellipse at 50% 30%, rgba(80, 20, 120, 0.55), transparent 60%),
+		linear-gradient(180deg, rgba(4, 2, 12, 0.93), rgba(4, 2, 12, 0.98));
+	text-align: center;
+}
+
+.t-inner {
+	max-width: 760px;
+	padding: 28px;
+	position: relative;
+}
+
+/* back to the game picker; every game gets one on its title screen */
+.t-back {
+	position: absolute;
+	top: 4px;
+	left: 28px;
+	pointer-events: auto;
+	font-size: 10px;
+	letter-spacing: 4px;
+	color: rgba(255, 255, 255, 0.4);
+	text-decoration: none;
+	transition: color 0.15s;
+}
+
+.t-back:hover {
+	color: var(--cyan);
+}
+
+.t-kicker {
+	font-size: 12px;
+	letter-spacing: 9px;
+	color: var(--cyan);
+	opacity: 0.85;
+	margin-bottom: 10px;
+}
+
+.t-title {
+	margin: 0 0 6px;
+	line-height: 0.92;
+}
+
+.t-title span {
+	display: block;
+	font-size: clamp(56px, 12vw, 132px);
+	font-weight: 700;
+	letter-spacing: 10px;
+	background: linear-gradient(180deg, #fff 20%, var(--orange) 95%);
+	-webkit-background-clip: text;
+	background-clip: text;
+	color: transparent;
+	filter: drop-shadow(0 6px 32px rgba(255, 122, 26, 0.6));
+}
+
+.t-title em {
+	display: block;
+	font-style: normal;
+	font-size: clamp(16px, 3.2vw, 30px);
+	letter-spacing: 16px;
+	color: var(--cyan);
+	text-shadow: 0 0 26px rgba(49, 230, 255, 0.75);
+	margin-top: 4px;
+}
+
+.t-sub {
+	color: rgba(255, 255, 255, 0.72);
+	font-size: 16px;
+	letter-spacing: 1.6px;
+	line-height: 1.6;
+	margin: 20px auto 26px;
+	max-width: 520px;
+}
+
+button {
+	pointer-events: auto;
+	font-family: inherit;
+	font-size: 19px;
+	font-weight: 700;
+	letter-spacing: 7px;
+	padding: 15px 52px;
+	color: #150a02;
+	background: linear-gradient(120deg, var(--orange-hot), var(--orange));
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+	box-shadow: 0 0 34px rgba(255, 122, 26, 0.55);
+	transition: transform 0.12s, box-shadow 0.12s, filter 0.12s;
+	margin: 6px;
+}
+
+button:hover {
+	transform: translateY(-2px) scale(1.03);
+	box-shadow: 0 0 52px rgba(255, 122, 26, 0.9);
+	filter: brightness(1.08);
+}
+
+button:active {
+	transform: translateY(1px) scale(0.99);
+}
+
+button.ghost {
+	background: transparent;
+	color: rgba(255, 255, 255, 0.7);
+	border: 1px solid rgba(255, 255, 255, 0.3);
+	box-shadow: none;
+	font-size: 13px;
+	letter-spacing: 4px;
+	padding: 10px 26px;
+}
+
+button.small {
+	font-size: 12px;
+	letter-spacing: 3px;
+	padding: 10px 18px;
+	margin: 0;
+	flex: 0 0 auto;
+}
+
+button:disabled {
+	filter: grayscale(0.6) brightness(0.8);
+	cursor: default;
+	transform: none;
+}
+
+.t-keys {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+	gap: 8px 20px;
+	margin: 30px auto 0;
+	max-width: 620px;
+	font-size: 12.5px;
+	letter-spacing: 2px;
+	color: rgba(255, 255, 255, 0.55);
+}
+
+.t-keys b {
+	color: var(--cyan);
+	letter-spacing: 1.5px;
+}
+
+.t-foot {
+	margin-top: 22px;
+	font-size: 11px;
+	letter-spacing: 3px;
+	color: rgba(255, 255, 255, 0.3);
+}
+
+h2 {
+	font-size: clamp(30px, 6vw, 62px);
+	letter-spacing: 10px;
+	margin: 0 0 24px;
+	background: linear-gradient(180deg, #fff, var(--magenta));
+	-webkit-background-clip: text;
+	background-clip: text;
+	color: transparent;
+}
+
+/* ============================ OPTION ROWS ============================ */
+.toggle,
+.slider {
+	display: block;
+	pointer-events: auto;
+	margin: 12px auto;
+	font-size: 13px;
+	letter-spacing: 3px;
+	color: rgba(255, 255, 255, 0.65);
+	cursor: pointer;
+	width: max-content;
+}
+
+.toggle input {
+	accent-color: var(--orange);
+	margin-right: 8px;
+	transform: scale(1.2);
+	cursor: pointer;
+}
+
+.slider input {
+	accent-color: var(--cyan);
+	vertical-align: middle;
+	margin-left: 10px;
+	cursor: pointer;
+}
+
+.spinner {
+	width: 46px;
+	height: 46px;
+	margin: 0 auto 18px;
+	border: 3px solid rgba(255, 122, 26, 0.25);
+	border-top-color: var(--orange);
+	border-radius: 50%;
+	animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+/* ============================ SUBMIT ROW ============================ */
+.name-row {
+	display: flex;
+	gap: 8px;
+	justify-content: center;
+	align-items: stretch;
+}
+
+/* who-are-you roster: one button per player, plus Guest */
+.who-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	justify-content: center;
+	margin-bottom: 10px;
+}
+
+.who {
+	pointer-events: auto;
+	font-family: inherit;
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: 3px;
+	padding: 9px 16px;
+	margin: 0;
+	color: rgba(255, 255, 255, 0.65);
+	background: rgba(10, 6, 22, 0.85);
+	border: 1px solid rgba(255, 255, 255, 0.22);
+	border-radius: 4px;
+	box-shadow: none;
+	cursor: pointer;
+}
+
+.who:hover {
+	transform: none;
+	filter: none;
+	box-shadow: none;
+	border-color: rgba(49, 230, 255, 0.5);
+	color: #fff;
+}
+
+.who.on {
+	color: #150a02;
+	background: linear-gradient(120deg, var(--orange-hot), var(--orange));
+	border-color: transparent;
+	box-shadow: 0 0 22px rgba(255, 122, 26, 0.5);
+}
+
+.pin-input {
+	pointer-events: auto;
+	flex: 0 0 auto;
+	width: 96px;
+	font-family: inherit;
+	font-size: 17px;
+	font-weight: 700;
+	letter-spacing: 6px;
+	text-align: center;
+	padding: 10px 12px;
+	color: #fff;
+	background: rgba(10, 6, 22, 0.85);
+	border: 1px solid rgba(255, 255, 255, 0.28);
+	border-radius: 4px;
+	outline: none;
+}
+
+.pin-input:focus {
+	border-color: var(--cyan);
+	box-shadow: 0 0 16px rgba(49, 230, 255, 0.35);
+}
+
+/* ============================ SCORE TABLE ============================ */
+.board {
+	margin: 0 auto 20px;
+	max-width: 460px;
+	width: 100%;
+	text-align: left;
+	font-variant-numeric: tabular-nums;
+}
+
+.board-title {
+	font-size: 10px;
+	letter-spacing: 5px;
+	color: rgba(255, 255, 255, 0.4);
+	text-align: center;
+	margin-bottom: 8px;
+}
+
+.board-row {
+	display: grid;
+	grid-template-columns: 28px 1fr auto auto;
+	gap: 10px;
+	align-items: baseline;
+	padding: 5px 10px;
+	border-radius: 3px;
+	font-size: 13px;
+	letter-spacing: 1px;
+	color: rgba(255, 255, 255, 0.82);
+}
+
+.board-row:nth-child(odd) {
+	background: rgba(255, 255, 255, 0.045);
+}
+
+.board-row .rk {
+	color: rgba(255, 255, 255, 0.35);
+	font-size: 11px;
+}
+
+.board-row .nm {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* the middle column: whatever stat the game wants to brag about */
+.board-row .wv {
+	font-size: 10px;
+	letter-spacing: 1px;
+	color: rgba(255, 255, 255, 0.35);
+}
+
+.board-row .sc {
+	font-weight: 700;
+	color: #fff;
+}
+
+.board-row.top-1 .rk,
+.board-row.top-1 .sc {
+	color: var(--orange-hot);
+}
+
+.board-row.you {
+	background: rgba(255, 122, 26, 0.18);
+	box-shadow: inset 0 0 0 1px rgba(255, 122, 26, 0.45);
+}
+
+.board-empty {
+	text-align: center;
+	font-size: 11px;
+	letter-spacing: 2px;
+	color: rgba(255, 255, 255, 0.3);
+	padding: 10px;
+}
+
+.board-compact {
+	max-width: 340px;
+	margin-top: 18px;
+}
+
+.board-compact .board-row {
+	font-size: 12px;
+	padding: 3px 8px;
+}
+
+/* ============================ TOUCH / DESKTOP ============================ */
+.touch-only {
+	display: none;
+}
+
+body.touch .touch-only {
+	display: block;
+}
+
+body.touch .t-keys.touch-only {
+	display: grid;
+}
+
+body.touch .desktop-only,
+body.touch .t-keys.desktop-only {
+	display: none !important;
+}
+
+body.touch {
+	cursor: default;
+	overscroll-behavior: none;
+}
+
+@media (max-width: 900px), (max-height: 560px) {
+	.board {
+		max-width: 340px;
+		margin-bottom: 12px;
+	}
+
+	.board-row {
+		font-size: 11px;
+		padding: 3px 8px;
+	}
+
+	.board-compact {
+		display: none;
+	}
+}
