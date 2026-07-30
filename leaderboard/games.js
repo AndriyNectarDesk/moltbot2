@@ -60,14 +60,27 @@ export const GAMES = {
 
 	city: {
 		label: "SOFIA: CITY LIGHTS",
+		// One delivery is enough to be in the running. Free-roam driving scores
+		// nothing at all, by design — only a SHIFT reaches this board.
 		qualify: 1,
-		brag: (s) => (s.deliveries ? `${s.deliveries}d` : ""),
+		brag: (s) => (s.deliveries ? `${s.deliveries} JOBS` : ""),
 		stats: {
 			deliveries: { min: 0, max: 200 },
-			stars: { min: 0, max: 200 },
-			bestRun: { min: 0, max: 600 }, // seconds
+			// There are 51 stars in the city; the ceiling just leaves headroom.
+			stars: { min: 0, max: 60 },
+			// Seconds for the quickest single delivery. Can't exceed the shift.
+			bestRun: { min: 0, max: 300 },
 		},
-		plausible: null, // TODO Phase 3
+		// Only `deliveries` — 200 in a five-minute shift is absurd. `bestRun` is a
+		// minimum-type stat, so sitting at its ceiling is a slow delivery rather
+		// than a suspicious one, and `stars` is a collection the game is actively
+		// asking you to complete, so flagging a full set would punish finishing it.
+		suspiciousMax: ["deliveries"],
+		// Measured: a simulated beeline driver at 22 m/s banks ~29k over a
+		// five-minute shift and one at 31 m/s ~55k, and a real player navigating
+		// actual streets will be well under that. The single richest possible
+		// delivery is a full-width run, clean, at a 3x streak — about 3,700.
+		plausible: (score, s) => score <= s.deliveries * 3_800 + 500,
 	},
 }
 
@@ -130,7 +143,8 @@ export const EYEBROW = {
 	nova: 100_000,
 	// A very good measured run lands around 15k; 30k is a morning worth asking about.
 	fish: 30_000,
-	city: null, // TODO Phase 3
+	// A simulated flat-out beeline shift banks ~55k; 70k is a shift worth asking about.
+	city: 70_000,
 }
 
 /** Rate limiting, held on the player's own board row rather than a separate KV key. */

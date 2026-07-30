@@ -886,9 +886,13 @@ addEventListener("DOMContentLoaded", () => {
 		const load = $("loading")
 		if (load) {
 			load.classList.remove("hidden")
-			load.innerHTML =
-				`<div class="t-inner"><h2>WEBGL ERROR</h2>` +
-				`<p class="t-sub">This lake needs WebGL2. Try a different browser or turn on hardware acceleration.</p></div>`
+			// Report what actually broke. Blaming WebGL for every startup failure
+			// sends whoever is debugging it to look at the GPU when the real cause
+			// is usually a plain TypeError two lines into a constructor.
+			const webgl = !document.createElement("canvas").getContext("webgl2")
+			load.innerHTML = webgl
+				? `<div class="t-inner"><h2>NO WEBGL2</h2><p class="t-sub">This lake needs WebGL2. Try a different browser, or turn on hardware acceleration.</p></div>`
+				: `<div class="t-inner"><h2>IT BROKE</h2><p class="t-sub">${String(err && err.message ? err.message : err).replace(/[<>&]/g, "")}</p></div>`
 		}
 	}
 })
