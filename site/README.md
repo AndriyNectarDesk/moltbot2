@@ -6,7 +6,7 @@ Three browser games, one per kid, sharing a weekly prize board.
 | --- | --- | --- |
 | `/` | the hub — game picker and joint prize board | live |
 | `/nova/` | **DANYLO: NECTAR NOVA** — 3D arena shooter | live |
-| `/fish/` | **MIKE: QUIET WATER** — fishing | not built yet |
+| `/fish/` | **MIKE: QUIET WATER** — fishing, three minutes at dawn | live |
 | `/city/` | **SOFIA: CITY LIGHTS** — open world, delivery jobs | not built yet |
 
 ## Run it
@@ -39,10 +39,30 @@ art assets.** Every mesh is primitives, every texture is drawn with canvas at
 load, all sound is synthesised with WebAudio. A game is a folder you can copy.
 
 `shared/` is deliberately small — only things that already have more than one
-consumer. `quality.js`, `touch.js`, `audio.js` and `fx.js` stay duplicated per
-game on purpose: each would need a seam invented for it, and inventing a seam
-with one real consumer reliably produces one that fits nobody. When the second
-game exists, diff its copies against Nova's — the diff is the seam specification.
+consumer. `quality.js`, `audio.js` and `fx.js` stay duplicated per game on
+purpose: each would need a seam invented for it, and inventing a seam with one
+real consumer reliably produces one that fits nobody.
+
+Now that a second game exists, that bet can be scored. Diffing `fish/src` against
+`nova/src`:
+
+- **`fx.js` — identical.** This one is genuinely shareable; do it when the third
+  game confirms the shape.
+- **`audio.js` — engine identical, everything above it different.** The synth
+  primitives and the look-ahead scheduler didn't move a line; the sound bank and
+  the music are wholly new. Worth splitting into an engine plus a per-game bank.
+- **`quality.js` — scaler identical, `apply()` and the preset flags different**,
+  exactly as predicted. A shared version needs an injected `onApply(preset)` and
+  a per-game extras bag, which is now a known shape rather than a guess.
+- **`touch.js` — not reused at all.** Fishing needs one contextual button, not a
+  stick and five action keys. Finding out a module *shouldn't* be shared is a
+  successful result, not a failure.
+- **`shared/input.js` — not reused either.** It's built on pointer lock and
+  relative deltas; the fishing game needs an absolute position on the water and
+  never grabs the cursor, so it has its own 110-line `pointer.js`.
+
+Conclusion so far: share `fx.js` and split `audio.js`; leave `quality.js` until a
+third consumer proves the callback shape; don't share input at all.
 
 ## Scores and the weekly prize
 

@@ -210,7 +210,7 @@ describe("storing scores", () => {
 
 	it("keeps each game's board separate", async () => {
 		await post("danylo", 12000)
-		await post("mike", 3, { landed: 3, heaviest: 2200, species: 2, flow: 1 }, "fish")
+		await post("mike", 3, { landed: 3, heaviest: 2200, species: 2, flow: 10 }, "fish")
 		expect((await top("nova")).entries.map((e) => e.player)).toEqual(["danylo"])
 		expect((await top("fish")).entries.map((e) => e.player)).toEqual(["mike"])
 	})
@@ -292,7 +292,7 @@ describe("validation", () => {
 	// The regression test for the whole multi-game exercise: v1's validator
 	// required wave/kills/combo, so a fishing score was a 400.
 	it("accepts a fishing score that has no wave", async () => {
-		const r = await post("mike", 4200, { landed: 6, heaviest: 4200, species: 3, flow: 2 }, "fish")
+		const r = await post("mike", 4200, { landed: 6, heaviest: 4200, species: 3, flow: 20 }, "fish")
 		expect(r.status).toBe(200)
 		expect((await r.json()).improved).toBe(true)
 	})
@@ -305,6 +305,52 @@ describe("validation", () => {
 			stats: { wave: 3, kills: 5, combo: 2 },
 		})
 		expect(r.status).toBe(400)
+	})
+
+	// The fishing game now exists, so its config is real rather than a placeholder.
+	it("accepts a realistic fishing run", async () => {
+		const r = await post(
+			"mike",
+			1651,
+			{ landed: 7, heaviest: 4748, species: 4, flow: 30 },
+			"fish",
+		)
+		expect(r.status).toBe(200)
+		expect((await r.json()).improved).toBe(true)
+	})
+
+	it("accepts a blank morning with nothing caught", async () => {
+		const r = await post("mike", 0, { landed: 0, heaviest: 0, species: 0, flow: 10 }, "fish")
+		expect(r.status).toBe(200)
+	})
+
+	it("rejects a fish heavier than the lake holds", async () => {
+		const r = await post(
+			"mike",
+			500,
+			{ landed: 1, heaviest: 250_000, species: 1, flow: 10 },
+			"fish",
+		)
+		expect(r.status).toBe(400)
+	})
+
+	it("rejects more species than exist", async () => {
+		const r = await post("mike", 500, { landed: 9, heaviest: 900, species: 9, flow: 10 }, "fish")
+		expect(r.status).toBe(400)
+	})
+
+	it("flags a fishing score too big for the fish landed", async () => {
+		// Two fish cannot be worth 200k — the best single fish in the lake is a
+		// 17kg sturgeon at a 3x multiplier, which is 10,200.
+		await post("mike", 200_000, { landed: 2, heaviest: 17_000, species: 2, flow: 30 }, "fish")
+		const raw = JSON.parse(env.SCORES.m.get(`wk:fish:${WEEK}`).value)
+		expect(raw.entries[0].flags).toContain("implausible")
+	})
+
+	it("does not flag an honest big morning", async () => {
+		await post("mike", 9000, { landed: 6, heaviest: 12_000, species: 4, flow: 30 }, "fish")
+		const raw = JSON.parse(env.SCORES.m.get(`wk:fish:${WEEK}`).value)
+		expect(raw.entries[0].flags).toEqual([])
 	})
 
 	it("drops stats the game never declared", async () => {
@@ -606,7 +652,7 @@ describe("joint board", () => {
 	it("sums prize points across games", async () => {
 		await post("danylo", 12000)
 		await post("mike", 30000)
-		await post("mike", 5000, { landed: 6, heaviest: 5000, species: 3, flow: 2 }, "fish")
+		await post("mike", 5000, { landed: 6, heaviest: 5000, species: 3, flow: 20 }, "fish")
 		const d = await (await call("GET", "/joint")).json()
 		expect(d.closed).toBe(false)
 		expect(d.week).toBe(WEEK)

@@ -82,6 +82,11 @@ jobs:
                    hub.js \
                    nova/style.css \
                    nova/src/main.js \
+                   fish/ \
+                   fish/style.css \
+                   fish/src/main.js \
+                   fish/src/fish.js \
+                   fish/src/lake.js \
                    favicon.svg \
                    preview.png; do
             # --retry-all-errors so Pages propagation lag gets another go; a file

@@ -291,8 +291,8 @@ async function handleScore(request, env, origin, gameId) {
 	// curve keyed on a client-supplied stat is satisfied by maxing that stat.
 	// These two cover the gap the other signals leave.
 	if (EYEBROW[gameId] != null && score > EYEBROW[gameId]) added.push(`high:${score}`)
-	for (const [field, range] of Object.entries(game.stats)) {
-		if (stats[field] === range.max) added.push(`maxed:${field}`)
+	for (const field of game.suspiciousMax || []) {
+		if (stats[field] === game.stats[field].max) added.push(`maxed:${field}`)
 	}
 	if (Number.isFinite(Number(body.durationMs))) {
 		const secs = Number(body.durationMs) / 1000

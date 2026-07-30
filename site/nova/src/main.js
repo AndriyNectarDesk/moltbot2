@@ -141,8 +141,11 @@ class Game {
 	}
 
 	_resize() {
-		const w = innerWidth
-		const h = innerHeight
+		// A 0x0 viewport (hidden iframe, container not yet laid out) would make
+		// the aspect NaN and poison the projection matrix for good, since this
+		// only re-runs on a resize event.
+		const w = Math.max(1, innerWidth)
+		const h = Math.max(1, innerHeight)
 		this.camera.aspect = w / h
 		this.camera.updateProjectionMatrix()
 		this.renderer.setSize(w, h)
