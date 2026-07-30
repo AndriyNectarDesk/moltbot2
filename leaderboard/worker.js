@@ -27,7 +27,7 @@
 // bites is a Durable Object behind readBoard/writeBoard — the only two functions
 // that touch storage.
 
-import { FLAGS, GAME_IDS, GAMES, POINTS, RATE, cleanStats, validate } from "./games.js"
+import { EYEBROW, FLAGS, GAME_IDS, GAMES, POINTS, RATE, cleanStats, validate } from "./games.js"
 import { gameStandings, jointStandings, payoutProposal, rankEntries } from "./scoring.js"
 import { isWeekKey, nextWeek, weekHasEnded, weekKey } from "./week.js"
 import { renderAdmin } from "./admin.js"
@@ -113,10 +113,22 @@ async function writeBoard(env, board) {
 	await env.SCORES.put(boardKey(board.game, board.week), JSON.stringify(board))
 }
 
-async function readJson(env, key, fallback) {
+/**
+ * Read a non-board JSON value, with the same absent-vs-corrupt discipline.
+ *
+ * `ok` validates the shape. Same reasoning as readBoard: silently substituting a
+ * fallback for a corrupt value and then writing over it is how a week's payout
+ * log or closed-week index would quietly disappear.
+ */
+async function readJson(env, key, fallback, ok) {
 	const raw = await env.SCORES.get(key, "json")
-	return raw == null ? fallback : raw
+	if (raw == null) return fallback
+	if (ok && !ok(raw)) throw new BoardShapeError(key)
+	return raw
 }
+
+const isWeekIndex = (v) => v && Array.isArray(v.weeks)
+const isPayoutLog = (v) => v && Array.isArray(v.items)
 
 /** Every game's entries for one week, for the joint board. */
 async function readAllBoards(env, week) {
@@ -159,6 +171,29 @@ async function authPlayer(env, body) {
 
 /** What a player is allowed to see. Flags and rate state are for the dashboard only. */
 const publicEntry = (e) => ({ player: e.player, score: e.score, at: e.at, stats: e.stats })
+
+/**
+ * Kinds where the value names a distinct thing rather than measuring one.
+ *
+ * `jump:8.2x` and `jump:100.0x` are the same signal re-measured, so only the
+ * latest is worth keeping. `maxed:wave` and `maxed:combo` are different facts and
+ * must both survive — collapsing them by kind would report only one maxed stat.
+ */
+const MULTI_VALUE_FLAGS = new Set(["maxed"])
+
+/**
+ * Union of flags already on the row and the ones this submission raised, keeping
+ * one per kind so a re-measured signal doesn't grow without bound. Once a flag is
+ * raised it stays raised for the week — see the entry construction below.
+ */
+function mergeFlags(previous = [], added = []) {
+	const seen = new Map()
+	for (const flag of [...(previous || []), ...added]) {
+		const kind = String(flag).split(":")[0]
+		seen.set(MULTI_VALUE_FLAGS.has(kind) ? String(flag) : kind, flag)
+	}
+	return [...seen.values()]
+}
 
 // ---------------------------------------------------------------- routes
 
@@ -245,19 +280,26 @@ async function handleScore(request, env, origin, gameId) {
 	// Flags are for the dashboard. They never reject a score and never appear in
 	// the player's response: blocking a genuinely spectacular run would punish
 	// exactly the thing we want the kids doing.
-	const flags = []
+	const added = []
 	if (prev && prev.score > 0 && score / prev.score >= FLAGS.scoreJump) {
-		flags.push(`jump:${(score / prev.score).toFixed(1)}x`)
+		added.push(`jump:${(score / prev.score).toFixed(1)}x`)
 	}
 	const runs = (prev ? prev.runs || 0 : 0) + 1
-	if (runs > FLAGS.weeklyRuns) flags.push(`runs:${runs}`)
-	if (game.plausible && !game.plausible(score, stats)) flags.push("implausible")
+	if (runs > FLAGS.weeklyImprovements) added.push(`runs:${runs}`)
+	if (game.plausible && !game.plausible(score, stats)) added.push("implausible")
+	// The jump signal can't see a first-of-week submission, and a plausibility
+	// curve keyed on a client-supplied stat is satisfied by maxing that stat.
+	// These two cover the gap the other signals leave.
+	if (EYEBROW[gameId] != null && score > EYEBROW[gameId]) added.push(`high:${score}`)
+	for (const [field, range] of Object.entries(game.stats)) {
+		if (stats[field] === range.max) added.push(`maxed:${field}`)
+	}
 	if (Number.isFinite(Number(body.durationMs))) {
 		const secs = Number(body.durationMs) / 1000
 		// Self-inconsistent rather than impossible: a run claiming a huge score
 		// in a few seconds contradicts its own numbers. Forgeable, so it proves
 		// nothing — it just catches carelessness.
-		if (secs > 0 && score / secs > 20_000) flags.push(`rate:${Math.round(score / secs)}/s`)
+		if (secs > 0 && score / secs > 20_000) added.push(`rate:${Math.round(score / secs)}/s`)
 	}
 
 	const entry = {
@@ -267,7 +309,12 @@ async function handleScore(request, env, origin, gameId) {
 		stats,
 		runs,
 		lastAcceptedAt: now,
-		flags,
+		// Carry forward what was already raised. The row is replaced wholesale on
+		// every improvement, so without this a flagged cheat is cleaned up by its
+		// own next ordinary submission — one +1 run and the dashboard, and the
+		// frozen week snapshot, show a spotless top score. Flags are the whole
+		// audit trail, so they have to be sticky for the week.
+		flags: mergeFlags(prev ? prev.flags : [], added),
 	}
 
 	if (prevIndex !== -1) board.entries.splice(prevIndex, 1)
@@ -403,6 +450,10 @@ async function handleClose(env, url) {
 		return adminJson({ error: "week already closed; pass ?force=1 to redo it", week, closedAt: existing.closedAt }, 409)
 	}
 
+	// Read everything that can fail BEFORE the irreversible write. Reading the
+	// index afterwards meant a corrupt index left the week closed but missing
+	// from the history — closed, unlisted, and not re-closable without ?force=1.
+	const index = await readJson(env, "weeks:index", { v: 1, weeks: [] }, isWeekIndex)
 	const boards = await readAllBoards(env, week)
 	const proposal = payoutProposal(boards)
 
@@ -429,7 +480,6 @@ async function handleClose(env, url) {
 
 	await env.SCORES.put(finalKey(week), JSON.stringify(snapshot))
 
-	const index = await readJson(env, "weeks:index", { v: 1, weeks: [] })
 	if (!index.weeks.includes(week)) {
 		index.weeks.push(week)
 		index.weeks.sort()
@@ -451,7 +501,7 @@ async function handlePayout(request, env) {
 	const amount = Number(body.amount)
 	if (!Number.isFinite(amount) || amount < 0) return adminJson({ error: "bad amount" }, 400)
 
-	const log = await readJson(env, "payouts:log", { v: 1, items: [] })
+	const log = await readJson(env, "payouts:log", { v: 1, items: [] }, isPayoutLog)
 	const item = {
 		week,
 		player: String(body.player || "").toLowerCase(),
@@ -465,8 +515,8 @@ async function handlePayout(request, env) {
 }
 
 async function handleAdminHistory(env) {
-	const index = await readJson(env, "weeks:index", { v: 1, weeks: [] })
-	const log = await readJson(env, "payouts:log", { v: 1, items: [] })
+	const index = await readJson(env, "weeks:index", { v: 1, weeks: [] }, isWeekIndex)
+	const log = await readJson(env, "payouts:log", { v: 1, items: [] }, isPayoutLog)
 	const weeks = []
 	for (const week of index.weeks) {
 		const snap = await readJson(env, finalKey(week), null)
@@ -504,7 +554,7 @@ export default {
 					if (!isWeekKey(week)) return html("<p>bad week</p>", 400)
 					const boards = await readAllBoards(env, week)
 					const snapshot = await readJson(env, finalKey(week), null)
-					const log = await readJson(env, "payouts:log", { v: 1, items: [] })
+					const log = await readJson(env, "payouts:log", { v: 1, items: [] }, isPayoutLog)
 					return html(
 						renderAdmin({
 							week,
@@ -516,6 +566,17 @@ export default {
 							payouts: log.items.filter((p) => p.week === week),
 						}),
 					)
+				}
+				// Basic auth alone doesn't protect a write here: a cross-origin
+				// <form method="POST"> is a CORS-simple request, so the browser
+				// would attach the cached credentials and the opaque response
+				// wouldn't matter — the side effect is the point, and the side
+				// effects are "freeze a week" and "overwrite a frozen week".
+				// A custom header can't be set by a form, only by the dashboard.
+				if (request.method === "POST" && path.startsWith("/admin/")) {
+					if (request.headers.get("X-Prize-Admin") !== "1") {
+						return adminJson({ error: "missing X-Prize-Admin header" }, 403)
+					}
 				}
 				if (request.method === "POST" && path === "/admin/close") return await handleClose(env, url)
 				if (request.method === "POST" && path === "/admin/payout") return await handlePayout(request, env)

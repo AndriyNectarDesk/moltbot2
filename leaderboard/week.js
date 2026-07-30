@@ -64,5 +64,12 @@ export function nextWeek(week) {
 
 /** A week key is only ever a Monday date; reject anything else before it reaches KV. */
 export function isWeekKey(s) {
-	return typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && weekKey(Date.parse(s + "T12:00:00Z")) === s
+	if (typeof s !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false
+	// The regex shape is not enough: "2026-13-45" passes it and parses to NaN,
+	// and formatting an invalid Date throws a RangeError rather than returning
+	// something comparable. This is a public query param, so a throw here would
+	// surface as an opaque 500 with no CORS headers instead of "bad week".
+	const ms = Date.parse(s + "T12:00:00Z")
+	if (!Number.isFinite(ms)) return false
+	return weekKey(ms) === s
 }

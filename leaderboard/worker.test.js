@@ -92,8 +92,13 @@ const post = (player, score, stats = { wave: 6, kills: 40, combo: 5 }, game = "n
 
 const top = async (game = "nova") => (await call("GET", `/g/${game}/top`)).json()
 
+// Mirrors what the dashboard page sends: Basic credentials plus the custom
+// header that a cross-origin form can't set.
 const admin = (method, path, body) =>
-	call(method, path, body, { Authorization: "Basic " + btoa("dad:hunter2") })
+	call(method, path, body, {
+		Authorization: "Basic " + btoa("dad:hunter2"),
+		"X-Prize-Admin": "1",
+	})
 
 // ------------------------------------------------------------ basics
 
@@ -449,6 +454,63 @@ describe("flags", () => {
 		const r = await post("danylo", 5_000_000, { wave: 1, kills: 1, combo: 1 })
 		expect(JSON.stringify(await r.json())).not.toContain("implausible")
 	})
+
+	// The row is replaced wholesale on every improvement, so without carrying
+	// flags forward a cheat cleans up after itself: post an absurd score, then
+	// one ordinary +1 run, and the dashboard and the frozen week snapshot both
+	// show a spotless top score. Flags are the entire audit trail.
+	it("keeps a flag after a later ordinary submission", async () => {
+		await post("danylo", 1000)
+		env.__NOW = NOW + 21_000
+		await post("danylo", 900_000) // jump + high
+		expect(flagsOf().some((f) => f.startsWith("jump:"))).toBe(true)
+
+		env.__NOW = NOW + 42_000
+		await post("danylo", 900_001) // a normal-looking 1.000001x improvement
+		const after = flagsOf()
+		expect(after.some((f) => f.startsWith("jump:"))).toBe(true)
+		expect(after.some((f) => f.startsWith("high:"))).toBe(true)
+	})
+
+	it("keeps flags in the frozen week snapshot", async () => {
+		await post("danylo", 1000)
+		env.__NOW = NOW + 21_000
+		await post("danylo", 900_000)
+		env.__NOW = NOW + 42_000
+		await post("danylo", 900_001)
+
+		env.__NOW = Date.parse("2026-08-04T18:00:00Z")
+		await admin("POST", `/admin/close?week=${WEEK}`)
+		const snap = await (await call("GET", `/week/${WEEK}`)).json()
+		expect(snap.flags.length).toBeGreaterThan(0)
+		expect(snap.flags.some((f) => f.signal.startsWith("jump:"))).toBe(true)
+	})
+
+	it("keeps only the latest flag of each kind", async () => {
+		await post("danylo", 1000)
+		env.__NOW = NOW + 21_000
+		await post("danylo", 9000) // jump:9.0x
+		env.__NOW = NOW + 42_000
+		await post("danylo", 900_000) // jump:100.0x
+		const jumps = flagsOf().filter((f) => f.startsWith("jump:"))
+		expect(jumps).toHaveLength(1)
+		expect(jumps[0]).toBe("jump:100.0x")
+	})
+
+	// The jump signal needs a previous row, so the simplest attack of all — one
+	// enormous first submission — was invisible to every other signal, and a
+	// plausibility curve keyed on a client-supplied stat is beaten by maxing it.
+	it("flags a huge first submission of the week", async () => {
+		await post("danylo", 49_999_999, { wave: 500, kills: 100_000, combo: 8 })
+		const flags = flagsOf()
+		expect(flags.some((f) => f.startsWith("high:"))).toBe(true)
+		expect(flags).toContain("maxed:wave")
+	})
+
+	it("leaves an ordinary first submission unflagged", async () => {
+		await post("danylo", 12_000, { wave: 6, kills: 40, combo: 5 })
+		expect(flagsOf()).toEqual([])
+	})
 })
 
 // ------------------------------------------------------------ corrupt storage
@@ -475,6 +537,66 @@ describe("corrupt storage", () => {
 		const r = await call("GET", "/g/nova/top")
 		expect(r.status).toBe(200)
 		expect((await r.json()).entries).toEqual([])
+	})
+
+	it("refuses to close a week when the week index is corrupt", async () => {
+		env.SCORES.m.set("weeks:index", { value: JSON.stringify("nope"), expiresAt: null })
+		env.__NOW = Date.parse("2026-08-04T18:00:00Z")
+		env.SCORES.resetWrites()
+		const r = await admin("POST", `/admin/close?week=${WEEK}`)
+		expect(r.status).toBe(500)
+		// The snapshot write used to happen before the index was read, so a bad
+		// index left the week closed but missing from the history.
+		expect(env.SCORES.writes).toBe(0)
+	})
+
+	it("refuses to record a payout when the log is corrupt", async () => {
+		env.SCORES.m.set("payouts:log", { value: JSON.stringify([1, 2]), expiresAt: null })
+		const r = await admin("POST", "/admin/payout", { week: WEEK, player: "mike", amount: 5 })
+		expect(r.status).toBe(500)
+	})
+})
+
+describe("bad week parameters", () => {
+	// The regex shape alone let "2026-13-45" through, which parsed to NaN and made
+	// Intl throw — surfacing as an opaque 500 with no CORS headers on a public
+	// route rather than the intended 400.
+	for (const week of ["2026-13-45", "0000-00-00", "9999-99-99", "2026-02-31", "current-ish"]) {
+		it(`returns 400 for week=${week}`, async () => {
+			expect((await call("GET", `/g/nova/top?week=${week}`)).status).toBe(400)
+			expect((await call("GET", `/joint?week=${week}`)).status).toBe(400)
+		})
+	}
+
+	it("returns 400, not a crash, for a bad week on /week/", async () => {
+		expect((await call("GET", "/week/2026-13-45")).status).toBe(400)
+	})
+
+	it("rejects a bad week on close", async () => {
+		expect((await admin("POST", "/admin/close?week=2026-13-45")).status).toBe(400)
+	})
+})
+
+describe("admin write protection", () => {
+	// Basic auth alone doesn't stop a cross-origin form post, and the side effects
+	// are "freeze a week" and "overwrite a frozen week".
+	it("rejects a close without the custom header", async () => {
+		env.__NOW = Date.parse("2026-08-04T18:00:00Z")
+		const r = await call("POST", `/admin/close?week=${WEEK}`, null, {
+			Authorization: "Basic " + btoa("dad:hunter2"),
+		})
+		expect(r.status).toBe(403)
+	})
+
+	it("rejects a payout without the custom header", async () => {
+		const r = await call("POST", "/admin/payout", { week: WEEK, player: "mike", amount: 5 }, {
+			Authorization: "Basic " + btoa("dad:hunter2"),
+		})
+		expect(r.status).toBe(403)
+	})
+
+	it("still checks auth before the header", async () => {
+		expect((await call("POST", "/admin/close")).status).toBe(401)
 	})
 })
 

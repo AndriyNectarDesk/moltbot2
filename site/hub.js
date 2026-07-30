@@ -7,7 +7,6 @@
 import { LEADERBOARD_URL } from "./shared/config.js"
 
 const GAME_ORDER = ["nova", "fish", "city"]
-const PLAYABLE = { nova: "./nova/" }
 
 const $ = (id) => document.getElementById(id)
 
@@ -75,12 +74,9 @@ function renderPerGame(perGame) {
 }
 
 async function load() {
-	// Make sure a coming-soon card can never look clickable.
-	for (const card of document.querySelectorAll("a.card")) {
-		const id = Object.keys(PLAYABLE).find((g) => card.getAttribute("href") === PLAYABLE[g])
-		if (!id) card.removeAttribute("href")
-	}
-
+	// Unbuilt games are plain <div class="card soon"> in the markup, not anchors,
+	// so there is nothing to disable here — a card becomes clickable only by
+	// being made an <a> when its game ships.
 	if (!LEADERBOARD_URL) {
 		$("week-line").textContent = "scores are kept on each device for now"
 		$("joint").innerHTML = ""

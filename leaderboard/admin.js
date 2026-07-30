@@ -170,7 +170,7 @@ ${paid}
 	const week = ${JSON.stringify(week)}
 	async function close_(force) {
 		if (!confirm("Freeze week " + week + "? Scores for it stop counting after this.")) return
-		const r = await fetch("/admin/close?week=" + week + (force ? "&force=1" : ""), { method: "POST" })
+		const r = await fetch("/admin/close?week=" + week + (force ? "&force=1" : ""), { method: "POST", headers: { "X-Prize-Admin": "1" } })
 		const d = await r.json()
 		alert(r.ok ? "Closed. Winner: " + (d.proposal.jointWinner || "nobody") : "Failed: " + d.error)
 		if (r.ok) location.reload()
@@ -181,7 +181,7 @@ ${paid}
 		if (!player || !amount) return alert("player and amount required")
 		const r = await fetch("/admin/payout", {
 			method: "POST",
-			headers: { "Content-Type": "application/json" },
+			headers: { "Content-Type": "application/json", "X-Prize-Admin": "1" },
 			body: JSON.stringify({ week, player, amount: Number(amount), reason: document.getElementById("r").value }),
 		})
 		const d = await r.json()

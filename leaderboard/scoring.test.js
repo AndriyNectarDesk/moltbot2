@@ -97,19 +97,72 @@ describe("jointStandings", () => {
 		])
 	})
 
-	it("breaks a total tie on most first places", () => {
+	// These three tiebreaks decide the larger of the two prizes, so each one is
+	// exercised in isolation with the earlier tiebreaks held equal. An earlier
+	// version of this test had totals that differed by 11, so the sort never
+	// reached the tiebreaks at all and it passed for the wrong reason.
+	it("breaks a level total on most first places", () => {
 		const out = jointStandings({
-			// danylo wins nova and comes 2nd in fish: 11 + 7 = 18
-			// mike wins fish and comes 2nd in nova: 11 + 7 = 18
-			// both have one win, so it falls through to games played, then time
-			nova: [e("danylo", 9000, 1000), e("mike", 5000, 1000)],
-			fish: [e("mike", 900, 1000), e("danylo", 400, 2000)],
-			city: [e("danylo", 100, 500), e("sofia", 90, 500)],
+			// nova: danylo 11, mike 7, sofia 4   fish: mike 11, sofia 7
+			// danylo 11 in one game with a win; sofia 11 in two games with none.
+			nova: [e("danylo", 9000, 1000), e("mike", 5000, 1000), e("sofia", 1000, 1000)],
+			fish: [e("mike", 900, 1000), e("sofia", 500, 1000)],
+			city: [],
 		})
-		// danylo now has 3 games and 2 wins
+		const danylo = out.find((p) => p.player === "danylo")
+		const sofia = out.find((p) => p.player === "sofia")
+		expect(danylo.total).toBe(sofia.total)
+		expect(danylo.firsts).toBeGreaterThan(sofia.firsts)
+		// And sofia played MORE games, so this only passes if wins are compared
+		// before games played — the ordering of the tiebreaks, not just their values.
+		expect(danylo.gamesPlayed).toBeLessThan(sofia.gamesPlayed)
+		expect(out.findIndex((p) => p.player === "danylo")).toBeLessThan(
+			out.findIndex((p) => p.player === "sofia"),
+		)
+	})
+
+	it("falls through to the earliest last run when everything else is level", () => {
+		const out = jointStandings({
+			// Both win one contested game and place second in the other: 18 each,
+			// one win each, two games each. Only the timestamps differ.
+			nova: [e("danylo", 9000, 1000), e("mike", 5000, 1000)],
+			fish: [e("mike", 900, 3000), e("danylo", 400, 2000)],
+			city: [],
+		})
+		expect(out.map((p) => p.total)).toEqual([18, 18])
+		expect(out.map((p) => p.firsts)).toEqual([1, 1])
+		expect(out.map((p) => p.gamesPlayed)).toEqual([2, 2])
+		// danylo's last qualifying run is at 2000, mike's at 3000 — earlier wins.
 		expect(out[0].player).toBe("danylo")
-		expect(out[0].firsts).toBe(2)
-		expect(out[0].gamesPlayed).toBe(3)
+	})
+
+	// Worth recording what came out of trying to build this fixture: with the
+	// default table (11/7/4 plus a participation point) and three games, there is
+	// no combination where two players are level on total AND on wins but differ
+	// on games played — so this tiebreak can never actually decide anything today.
+	// It's kept because it's correct and the point table is meant to be tuned, and
+	// it's tested against a table where it IS reachable so a future edit to
+	// POINTS doesn't silently break it.
+	it("prefers more games played when totals and wins are equal", () => {
+		const points = { places: [4, 2], participation: 0, minQualifiersForPlaces: 2 }
+		const out = jointStandings(
+			{
+				// danylo: 1st nova (4)                  -> 4, one game, one win
+				// mike:   1st fish (4) + 3rd city (0)   -> 4, two games, one win
+				nova: [e("danylo", 9000, 1000), e("sofia", 5000, 1000)],
+				fish: [e("mike", 9000, 1000), e("sofia", 5000, 1000)],
+				city: [e("sofia", 900, 1000), e("tato", 500, 1000), e("mike", 100, 1000)],
+			},
+			points,
+		)
+		const danylo = out.find((p) => p.player === "danylo")
+		const mike = out.find((p) => p.player === "mike")
+		expect(mike.total).toBe(danylo.total)
+		expect(mike.firsts).toBe(danylo.firsts)
+		expect(mike.gamesPlayed).toBeGreaterThan(danylo.gamesPlayed)
+		expect(out.findIndex((p) => p.player === "mike")).toBeLessThan(
+			out.findIndex((p) => p.player === "danylo"),
+		)
 	})
 
 	it("gives a kid who played nothing no row at all", () => {
@@ -125,10 +178,28 @@ describe("jointStandings", () => {
 })
 
 describe("jointIsTied", () => {
-	it("spots a level top two", () => {
-		expect(jointIsTied([{ total: 11 }, { total: 11 }])).toBe(true)
-		expect(jointIsTied([{ total: 12 }, { total: 11 }])).toBe(false)
-		expect(jointIsTied([{ total: 11 }])).toBe(false)
+	const row = (over) => ({ total: 11, firsts: 1, gamesPlayed: 2, lastAt: 500, ...over })
+
+	it("spots a genuine tie on every tiebreak", () => {
+		expect(jointIsTied([row(), row()])).toBe(true)
+	})
+
+	it("is false when the totals differ", () => {
+		expect(jointIsTied([row({ total: 12 }), row()])).toBe(false)
+	})
+
+	// The dashboard renders this as "level on every tiebreak — split it by hand".
+	// Saying that about a contest the tiebreaks resolved would pay half the
+	// bigger prize to the wrong kid, and it gets frozen into the week snapshot.
+	it("is false when a tiebreak separates them", () => {
+		expect(jointIsTied([row({ firsts: 2 }), row()])).toBe(false)
+		expect(jointIsTied([row({ gamesPlayed: 3 }), row()])).toBe(false)
+		expect(jointIsTied([row({ lastAt: 400 }), row()])).toBe(false)
+	})
+
+	it("is false with fewer than two players", () => {
+		expect(jointIsTied([row()])).toBe(false)
+		expect(jointIsTied([])).toBe(false)
 	})
 })
 

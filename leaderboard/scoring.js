@@ -84,9 +84,24 @@ export function jointStandings(boards, points = POINTS) {
 	)
 }
 
-/** True when the top two joint totals are level — the dashboard should say so out loud. */
+/**
+ * True only when the top two are level on the total AND on every tiebreak.
+ *
+ * Checking the total alone would be wrong in a way that matters: the sort above
+ * often does separate two level totals, and the dashboard renders this flag as
+ * "level on every tiebreak — split it by hand". Saying that about a contest the
+ * tiebreaks actually resolved would hand out half the larger prize to the wrong
+ * kid, and the claim gets frozen into the week snapshot.
+ */
 export function jointIsTied(standings) {
-	return standings.length > 1 && standings[0].total === standings[1].total
+	if (standings.length < 2) return false
+	const [a, b] = standings
+	return (
+		a.total === b.total &&
+		a.firsts === b.firsts &&
+		a.gamesPlayed === b.gamesPlayed &&
+		a.lastAt === b.lastAt
+	)
 }
 
 /**

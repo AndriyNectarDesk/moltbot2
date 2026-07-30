@@ -61,7 +61,23 @@ function migrateLegacy(game) {
 	try {
 		if (localStorage.getItem(NAME_KEY) === null) {
 			const old = localStorage.getItem(LEGACY_NAME_KEY)
-			if (old !== null) localStorage.setItem(NAME_KEY, old)
+			if (old !== null) {
+				// Lowercase on the way in. v1 stored whatever was typed, so the one
+				// kid who actually has legacy state has "Danylo" — which matches no
+				// roster id, so he'd land on the game-over screen with nothing
+				// selected, no PIN prompt and local-only saving. The shim exists to
+				// protect exactly that player.
+				let name = old
+				try {
+					const parsed = JSON.parse(old)
+					if (typeof parsed === "string" && ROSTER.includes(parsed.toLowerCase())) {
+						name = JSON.stringify(parsed.toLowerCase())
+					}
+				} catch {
+					// not JSON; carry it over untouched and let them pick again
+				}
+				localStorage.setItem(NAME_KEY, name)
+			}
 		}
 		if (game === "nova" && localStorage.getItem(scoresKey("nova")) === null) {
 			const old = localStorage.getItem(LEGACY_SCORES_KEY)
@@ -152,6 +168,12 @@ export class Leaderboard {
 		return rows.length ? rows[0].score : 0
 	}
 
+	/** Where a score already in the local table sits, for a retry that must not re-save. */
+	_rankOf(score) {
+		const i = this.localEntries().findIndex((r) => r.score === score)
+		return i === -1 ? null : i + 1
+	}
+
 	// ------------------------------------------------------------ network
 	async _fetch(path, options = {}) {
 		// Never let a hanging request stall the UI.
@@ -208,15 +230,19 @@ export class Leaderboard {
 	 * `ok` actually means something: false when the shared board refused the
 	 * submission, with `error` carrying the reason so the game can say "WRONG
 	 * PIN" instead of blaming the network.
+	 *
+	 * Pass `skipLocal` when re-submitting a run that was already saved — a retry
+	 * after a wrong PIN would otherwise append a second copy of the same run and
+	 * fill the local table with duplicates of it.
 	 */
-	async submit({ score, stats = {}, durationMs }) {
+	async submit({ score, stats = {}, durationMs, skipLocal = false }) {
 		const entry = {
 			player: this.name || GUEST,
 			score: Math.max(0, Math.round(score)),
 			stats,
 			at: Date.now(),
 		}
-		const localRank = this._saveLocal({ ...entry })
+		const localRank = skipLocal ? this._rankOf(entry.score) : this._saveLocal({ ...entry })
 
 		if (this.canPost) {
 			try {

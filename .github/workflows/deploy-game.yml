@@ -24,7 +24,21 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The leaderboard decides who gets paid, so a red test run must not reach the
+  # kids. Cheap gate: the deploy waits on it.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -53,6 +67,7 @@ jobs:
       - name: Check the deployed URLs resolve
         run: |
           base="${{ steps.deployment.outputs.page_url }}"
+          case "$base" in */) ;; *) base="$base/" ;; esac
           fail=0
           for p in "" \
                    nova/ \
@@ -66,8 +81,13 @@ jobs:
                    hub.css \
                    hub.js \
                    nova/style.css \
-                   nova/src/main.js; do
-            code=$(curl -s -o /dev/null -w "%{http_code}" --retry 3 --retry-delay 5 "$base$p")
+                   nova/src/main.js \
+                   favicon.svg \
+                   preview.png; do
+            # --retry-all-errors so Pages propagation lag gets another go; a file
+            # that is genuinely missing still fails after the retries.
+            code=$(curl -s -o /dev/null -w "%{http_code}" \
+                     --retry 4 --retry-delay 5 --retry-all-errors "$base$p")
             if [ "$code" != "200" ]; then
               echo "::error::$base$p returned $code"
               fail=1

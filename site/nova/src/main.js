@@ -281,7 +281,11 @@ class Game {
 				score: this.score,
 				stats: { wave: this.wave, kills: this.kills, combo: this.bestCombo },
 				durationMs: this.runMs,
+				// The run is saved locally on the first attempt; a retry must not
+				// append a second copy of it.
+				skipLocal: this._localSaved,
 			})
+			this._localSaved = true
 
 			this._renderBoard($("go-board"), res.entries.slice(0, 8), {
 				shared: res.shared,
@@ -291,7 +295,11 @@ class Game {
 
 			if (res.ok) {
 				submitBtn.textContent = res.shared ? "POSTED" : "SAVED"
-				if (res.rank === 1) {
+				if (res.shared && res.improved === false) {
+					// The server kept an earlier, better run of yours and wrote
+					// nothing. Saying "POSTED" for that would be a small lie.
+					msg.textContent = "YOUR BEST THIS WEEK IS STILL HIGHER"
+				} else if (res.rank === 1) {
 					msg.textContent = res.shared ? "TOP OF THE WEEK" : "NEW PERSONAL BEST"
 				} else if (res.rank) {
 					msg.textContent = `RANK #${res.rank}`
@@ -302,16 +310,15 @@ class Game {
 			} else {
 				// Say what actually went wrong. A rejected PIN used to be reported
 				// as an unreachable board, which sent you hunting the wrong fault.
-				submitBtn.textContent = "SAVED HERE"
 				msg.classList.add("warn")
-				if (res.status === 403) {
+				if (res.status === 403 && /pin/i.test(res.error || "")) {
 					msg.textContent = "WRONG PIN — SAVED ON THIS DEVICE"
 					this.board.forgetPin()
 					pinInput.value = ""
-					// Let them fix it and try again rather than locking the screen.
-					this._submitted = false
-					submitBtn.disabled = false
-					submitBtn.textContent = "POST SCORE"
+				} else if (res.status === 403) {
+					// The roster isn't set up server-side; blaming the PIN here
+					// would send a kid round in circles retyping a correct one.
+					msg.textContent = "BOARD NOT SET UP YET — SAVED ON THIS DEVICE"
 				} else if (res.status === 429) {
 					msg.textContent = "TOO SOON — SAVED ON THIS DEVICE"
 				} else if (res.status === 409) {
@@ -319,6 +326,13 @@ class Game {
 				} else {
 					msg.textContent = "SAVED ON THIS DEVICE — BOARD UNREACHABLE"
 				}
+				// Always allow another go. A 20s cooldown or a wifi blip must not
+				// permanently strand a run that might be the week's best — the
+				// next accepted submission has to beat your own score, so a lost
+				// great run can never be posted again.
+				this._submitted = false
+				submitBtn.disabled = false
+				submitBtn.textContent = "TRY AGAIN"
 			}
 			this.refreshTitleBoard()
 		}
@@ -477,6 +491,7 @@ class Game {
 		$("btn-submit").textContent = this.board.isRostered ? "POST SCORE" : "SAVE HERE"
 		$("go-pin-wrap").classList.toggle("hidden", !this.board.isRostered)
 		this._submitted = false
+		this._localSaved = false
 		this.board.top(8).then(({ entries, shared }) =>
 			this._renderBoard($("go-board"), entries, { shared, title: "TOP RUNS" }),
 		)

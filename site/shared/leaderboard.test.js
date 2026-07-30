@@ -60,13 +60,25 @@ describe("key namespacing", () => {
 })
 
 describe("legacy migration", () => {
-	it("carries the old name and Nova scores over", () => {
+	// v1 stored whatever was typed, so the one kid who actually has legacy state
+	// has "Danylo" — which matches no roster id. Left as-is he'd land on the
+	// game-over screen with nothing selected, no PIN prompt and local-only
+	// saving, which is the exact player this shim exists to protect.
+	it("carries the old name over and makes it postable", () => {
 		store.set("nectarnova.name", JSON.stringify("Danylo"))
 		store.set("nectarnova.scores", JSON.stringify([{ name: "Danylo", score: 3100, wave: 2 }]))
 
 		const nova = new Leaderboard("nova", "https://board.test")
-		expect(nova.name).toBe("Danylo")
+		expect(nova.name).toBe("danylo")
+		expect(nova.isRostered).toBe(true)
 		expect(nova.personalBest()).toBe(3100)
+	})
+
+	it("leaves a non-roster old name alone, as a guest", () => {
+		store.set("nectarnova.name", JSON.stringify("Grandma"))
+		const b = new Leaderboard("nova", "https://board.test")
+		expect(b.name).toBe("Grandma")
+		expect(b.isRostered).toBe(false)
 	})
 
 	it("is idempotent across constructions", () => {
@@ -214,6 +226,63 @@ describe("submit", () => {
 		expect(globalThis.fetch).not.toHaveBeenCalled()
 		expect(res).toMatchObject({ ok: true, shared: false })
 		expect(b.personalBest()).toBe(500)
+	})
+
+	// The game re-enables the button after a wrong PIN so the kid can retry, so
+	// without this every retry appended another copy of the same run and the
+	// twenty-row local table filled up with duplicates of it.
+	it("does not re-save the same run on a retry", async () => {
+		globalThis.fetch = vi.fn().mockResolvedValue({
+			ok: false,
+			status: 403,
+			json: async () => ({ error: "wrong pin" }),
+		})
+		const b = new Leaderboard("nova", "https://board.test")
+		b.setName("danylo")
+		b.setPin("9999")
+
+		await b.submit({ score: 12000, stats: {} })
+		await b.submit({ score: 12000, stats: {}, skipLocal: true })
+		await b.submit({ score: 12000, stats: {}, skipLocal: true })
+		expect(b.localEntries()).toHaveLength(1)
+	})
+
+	it("still reports the local rank on a skipped re-save", async () => {
+		globalThis.fetch = vi.fn().mockRejectedValue(new Error("offline"))
+		const b = new Leaderboard("nova", "https://board.test")
+		b.setName("danylo")
+		b.setPin("1111")
+		await b.submit({ score: 12000, stats: {} })
+		const res = await b.submit({ score: 12000, stats: {}, skipLocal: true })
+		expect(res.rank).toBe(1)
+		expect(b.localEntries()).toHaveLength(1)
+	})
+
+	// The game maps these to different messages: a wrong PIN is worth retyping,
+	// an unconfigured roster is not.
+	it("distinguishes a wrong pin from an unset roster", async () => {
+		const b = new Leaderboard("nova", "https://board.test")
+		b.setName("danylo")
+		b.setPin("1111")
+
+		globalThis.fetch = vi.fn().mockResolvedValue({
+			ok: false,
+			status: 403,
+			json: async () => ({ error: "unknown player" }),
+		})
+		const res = await b.submit({ score: 100, stats: {} })
+		expect(res.status).toBe(403)
+		expect(res.error).toBe("unknown player")
+		expect(/pin/i.test(res.error)).toBe(false)
+	})
+
+	it("carries improved through so the game can tell the truth", async () => {
+		globalThis.fetch = ok({ rank: 2, improved: false, entries: [] })
+		const b = new Leaderboard("nova", "https://board.test")
+		b.setName("danylo")
+		b.setPin("1111")
+		const res = await b.submit({ score: 100, stats: {} })
+		expect(res.improved).toBe(false)
 	})
 
 	it("omits durationMs when it is not a number", async () => {

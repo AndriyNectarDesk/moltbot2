@@ -94,8 +94,26 @@ export const FLAGS = {
 	// divide, and it catches the lazy console cheat that is most of what a kid
 	// would actually try.
 	scoreJump: 5,
-	// Accepted submissions in one game-week.
-	weeklyRuns: 40,
+	// Improvements accepted in one game-week. Note this counts improvements, not
+	// posts — a non-improving submission is deliberately free, so it isn't
+	// counted. Beating your own best 40 times in a week is already a lot.
+	weeklyImprovements: 40,
+}
+
+/**
+ * Scores above this get a look, per game.
+ *
+ * The jump signal needs a previous row to compare against, so it can't see the
+ * simplest attack of all: one enormous submission as your first run of the week.
+ * And a plausibility curve keyed on a stat the client also supplies is trivially
+ * satisfied by maxing that stat. This is the backstop for both — a flat "that is
+ * a very big number" line. Tune it once there are real scores; being a little
+ * low is harmless, since a flag never blocks anything.
+ */
+export const EYEBROW = {
+	nova: 100_000,
+	fish: null, // TODO Phase 2
+	city: null, // TODO Phase 3
 }
 
 /** Rate limiting, held on the player's own board row rather than a separate KV key. */
