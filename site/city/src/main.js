@@ -72,6 +72,14 @@ class Game {
 		this.carMesh = buildCarMesh("scout")
 		this.scene.add(this.carMesh)
 
+		// Headlights. One shadowless spotlight rather than two, because the road
+		// ahead being lit is the thing that matters and nobody can tell there is
+		// only one beam from behind the car. Positioned each frame rather than
+		// parented, so the light and its target can't drift out of sync.
+		this.headlights = new THREE.SpotLight(0xfff2d6, 0, 78, 0.62, 0.55, 0.9)
+		this.headlights.castShadow = false
+		this.scene.add(this.headlights, this.headlights.target)
+
 		this.shift = new Shift((avoid, minDist) => this._pickSpot(avoid, minDist))
 
 		this.quality = new Quality(this)
@@ -649,6 +657,16 @@ class Game {
 			// wheels left, and a positive steer input means right.
 			for (const w of this.carMesh.userData.steerWheels) w.rotation.y = -c.steerShown * 0.5
 		}
+		// Headlights lead the car and brighten as the evening draws in.
+		const hl = this.headlights
+		if (hl) {
+			hl.position.set(c.x + c.fwdX * 1.8, c.y + 1.1, c.z + c.fwdZ * 1.8)
+			hl.target.position.set(c.x + c.fwdX * 30, 0.1, c.z + c.fwdZ * 30)
+			hl.target.updateMatrixWorld()
+			const wanted = this.quality.preset.headlights ? 60 + this.city.night * 320 : 0
+			hl.intensity = damp(hl.intensity, wanted, 0.02, dt)
+		}
+
 		// Tyre smoke while sliding.
 		if (c.drifting && !c.airborne && Math.random() < 0.6) {
 			this.fx.spawn(

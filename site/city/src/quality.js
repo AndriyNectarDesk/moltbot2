@@ -17,6 +17,7 @@ export const PRESETS = {
 		particleScale: 0.25,
 		lamps: false,
 		neon: true,
+		headlights: false,
 	},
 	low: {
 		label: "LOW",
@@ -28,6 +29,7 @@ export const PRESETS = {
 		particleScale: 0.45,
 		lamps: false,
 		neon: true,
+		headlights: true,
 	},
 	medium: {
 		label: "MEDIUM",
@@ -39,6 +41,7 @@ export const PRESETS = {
 		particleScale: 0.75,
 		lamps: true,
 		neon: true,
+		headlights: true,
 	},
 	high: {
 		label: "HIGH",
@@ -50,6 +53,7 @@ export const PRESETS = {
 		particleScale: 1,
 		lamps: true,
 		neon: true,
+		headlights: true,
 	},
 }
 
