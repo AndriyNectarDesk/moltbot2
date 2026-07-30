@@ -1,7 +1,7 @@
 // DOM heads-up display: bars, combo, banners, kill feed and world-space damage numbers.
 
 import * as THREE from "three"
-import { clamp } from "./util.js"
+import { clamp } from "../../shared/util.js"
 import { drawFace } from "./hero.js"
 
 const $ = (id) => document.getElementById(id)

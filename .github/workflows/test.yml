@@ -1,0 +1,26 @@
+name: Tests
+
+# The leaderboard decides who gets paid a real weekly prize, so its week
+# arithmetic and points maths run on every change that touches them. Before
+# this existed there was no workflow running tests at all, and the worker's
+# suite had never been executed by CI even once.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm test

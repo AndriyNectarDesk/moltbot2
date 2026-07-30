@@ -15,6 +15,7 @@
 		/>
 		<meta name="theme-color" content="#160d2c" />
 		<link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+		<link rel="stylesheet" href="../shared/base.css" />
 		<link rel="stylesheet" href="./style.css" />
 
 		<!-- link preview when the game gets shared around -->
@@ -30,8 +31,8 @@
 		<script type="importmap">
 			{
 				"imports": {
-					"three": "./vendor/three.module.min.js",
-					"three/addons/": "./vendor/jsm/"
+					"three": "../vendor/three.module.min.js",
+					"three/addons/": "../vendor/jsm/"
 				}
 			}
 		</script>
@@ -120,6 +121,7 @@
 			<!-- ============ SCREENS ============ -->
 			<div id="title" class="screen">
 				<div class="t-inner">
+					<a class="t-back" href="../">&larr; ALL GAMES</a>
 					<div class="t-kicker">NECTAR FORCE PRESENTS</div>
 					<h1 class="t-title"><span>DANYLO</span><em>NECTAR NOVA</em></h1>
 					<p class="t-sub">
@@ -187,10 +189,19 @@
 					<div id="go-rank">ROOKIE</div>
 
 					<div id="go-submit">
-						<label for="go-name">HERO NAME</label>
+						<label>WHO'S PLAYING</label>
+						<div class="who-row">
+							<button class="who" data-who="danylo">DANYLO</button>
+							<button class="who" data-who="mike">MIKE</button>
+							<button class="who" data-who="sofia">SOFIA</button>
+							<button class="who" data-who="guest">GUEST</button>
+						</div>
 						<div class="name-row">
-							<input id="go-name" maxlength="14" placeholder="DANYLO" autocomplete="off"
-								autocapitalize="characters" spellcheck="false" />
+							<!-- asked once per device, then remembered; guests never see it -->
+							<span id="go-pin-wrap" class="hidden">
+								<input id="go-pin" class="pin-input" type="password" inputmode="numeric"
+									maxlength="8" placeholder="PIN" autocomplete="off" spellcheck="false" />
+							</span>
 							<button id="btn-submit" class="small">POST SCORE</button>
 						</div>
 						<div id="go-submit-msg"></div>

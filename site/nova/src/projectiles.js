@@ -1,7 +1,7 @@
 // Pooled projectiles: hero plasma bolts, enemy orbs, and pickup orbs.
 
 import * as THREE from "three"
-import { rand } from "./util.js"
+import { rand } from "../../shared/util.js"
 
 const _v = new THREE.Vector3()
 const _v2 = new THREE.Vector3()

@@ -1,7 +1,7 @@
 // The arena: a floating neon sky-pad above an endless cloud city.
 
 import * as THREE from "three"
-import { clamp, rand, randInt, TAU } from "./util.js"
+import { clamp, rand, randInt, TAU } from "../../shared/util.js"
 
 const ORANGE = 0xff7a1a
 const CYAN = 0x31e6ff

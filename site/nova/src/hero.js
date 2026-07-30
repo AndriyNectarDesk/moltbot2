@@ -2,7 +2,7 @@
 // Everything is built from primitives and animated procedurally (no model files).
 
 import * as THREE from "three"
-import { angleDelta, clamp, damp, lerp, rand, TAU } from "./util.js"
+import { angleDelta, clamp, damp, lerp, rand, TAU } from "../../shared/util.js"
 
 const SKIN = "#f6c9a0"
 const SKIN_SHADE = "#e0a87e"

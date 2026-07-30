@@ -2,7 +2,7 @@
 // small pool of expanding rings, shockwaves and beams.
 
 import * as THREE from "three"
-import { clamp, rand, TAU } from "./util.js"
+import { clamp, rand, TAU } from "../../shared/util.js"
 
 const MAX_PARTICLES = 2000
 

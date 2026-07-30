@@ -11,13 +11,13 @@ synthesised with WebAudio.
 ## Run it
 
 ```bash
-npm run game          # → http://127.0.0.1:5180/
+npm run site          # → http://127.0.0.1:5180/nova/
 ```
 
-That starts a tiny dependency-free static server (`game/serve.mjs`). Any static
-server works just as well, e.g. `python3 -m http.server 5180` from this folder.
-It has to be served over `http://` — ES modules and importmaps don't load from
-`file://`.
+That starts a tiny dependency-free static server (`site/serve.mjs`) for the whole
+arcade; this game lives at `/nova/`. Serve from `site/`, not from this folder —
+three.js and the shared score client both live one level up. It has to be served
+over `http://` — ES modules and importmaps don't load from `file://`.
 
 Needs WebGL2. On desktop, click **LAUNCH** and the game takes pointer lock; on a
 phone or tablet it switches to touch controls automatically.
@@ -25,24 +25,25 @@ phone or tablet it switches to touch controls automatically.
 ## Share it
 
 The game is static files, so it hosts anywhere. This repo ships a GitHub Pages
-workflow (`.github/workflows/deploy-game.yml`): once `game/` lands on `main`, the
+workflow (`.github/workflows/deploy-game.yml`): once `site/` lands on `main`, the
 workflow enables Pages and publishes to
 
-**https://andriynectardesk.github.io/moltbot2/**
+**https://andriynectardesk.github.io/moltbot2/nova/**
 
-Re-deploys happen automatically on any push to `main` that touches `game/`, and
-you can also trigger it by hand from the repo's **Actions** tab
-(*Deploy game to GitHub Pages* → *Run workflow*).
+with the arcade's game picker at the root. Re-deploys happen automatically on any
+push to `main` that touches `site/`, and you can also trigger it by hand from the
+repo's **Actions** tab (*Deploy game to GitHub Pages* → *Run workflow*).
 
-Prefer Cloudflare (custom domain, no repo coupling)? One command, no config:
+Prefer Cloudflare (custom domain, no repo coupling)? One command, no config —
+note it deploys the whole arcade, since this game depends on `../vendor` and
+`../shared`:
 
 ```bash
-npx wrangler pages deploy game --project-name danylo-nectar-nova
+npx wrangler pages deploy site --project-name nectar-arcade
 ```
 
-Either way, the only thing to update afterwards is the `og:image` URL in
-`index.html`, which points at the Pages copy of `preview.png` so shared links
-show a screenshot.
+The `og:image` URL in `index.html` is absolute, because link scrapers don't
+resolve relative ones — update it if you host somewhere else.
 
 ## Controls
 
@@ -110,26 +111,32 @@ the void.
 | `src/fx.js` | Particle system, shockwave rings, light bursts, beams |
 | `src/hud.js` | DOM HUD, damage numbers, kill feed, banners |
 | `src/audio.js` | Procedural SFX + the looping synth soundtrack |
-| `src/input.js` | Keyboard, mouse, pointer lock |
-| `vendor/` | three.js r185 + the postprocessing addons, vendored (MIT) |
+| `../shared/input.js` | Keyboard, mouse, pointer lock (shared) |
+| `../shared/util.js` | Maths and pooling helpers (shared) |
+| `../vendor/` | three.js r185 + the postprocessing addons, vendored (MIT) |
 
 ## Leaderboard
 
-After each run you can name your hero and post the score. Out of the box the
-board is **stored on this device only** — it works immediately, it just isn't
-shared. To make it shared across everyone's phones and laptops, deploy the
-Cloudflare Worker in [`../leaderboard`](../leaderboard) (about two minutes, free
-tier) and paste its URL into [`config.js`](./config.js).
+After each run, pick who you are and post the score. **Danylo**, **Mike** and
+**Sofia** each post to the shared weekly board with a PIN — asked once on this
+screen, then remembered on that device, never before playing. **GUEST** plays
+with a score kept on this device only, so a visiting friend needs nothing.
 
-Once shared, one row per name: re-posting only replaces your row if you beat
-your own score, so the table shows who is best rather than who played most.
+Boards run Monday to Sunday. One row per player per week: re-posting only
+replaces your row if you beat your own score, so the table shows who is best this
+week rather than who played most. Placing in a game earns prize points that add
+up on the arcade's joint board — see [`../README.md`](../README.md) and
+[`../../leaderboard`](../../leaderboard).
+
+With no `LEADERBOARD_URL` in [`../shared/config.js`](../shared/config.js), the
+board falls back to this device and the table says so.
 
 Worth knowing: **scores can't be verified.** The game runs in the player's own
-browser, so anyone who opens the devtools console can post any number. The
-worker rejects obvious nonsense and rate-limits submissions, but for a genuinely
-cheat-proof board the game would have to be simulated server-side. Among friends
-this is usually the right trade — just don't take a suspiciously round number
-too seriously.
+browser, so anyone who opens the devtools console can post any number — this game
+even encourages poking around in there. The PIN makes sure a score is at least
+attributed to the right kid, and unusual submissions get flagged for Dad, but
+nothing here can stop a determined console. That is why the weekly prize is paid
+by a person looking at the board, not by the code.
 
 ## Performance
 

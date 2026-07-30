@@ -14,6 +14,14 @@
     }
   ],
 
-  // Optional: restrict who may call the API. Without this any site can.
+  // Sets the Access-Control-Allow-Origin header. NOTE this does not block
+  // anything server-side — another origin's request still succeeds and is still
+  // written, it just gets a header its browser won't accept, and curl ignores
+  // the whole mechanism. The real gate on writing is the PLAYERS pin. See the
+  // README's "Honest limits".
   "vars": { "ALLOWED_ORIGINS": "https://andriynectardesk.github.io" }
+
+  // Secrets, set with `npx wrangler secret put <name> --config leaderboard/wrangler.jsonc`:
+  //   PLAYERS             {"danylo":"<sha256 of pin>","mike":"...","sofia":"..."}
+  //   DASHBOARD_PASSWORD  the password for /admin
 }
