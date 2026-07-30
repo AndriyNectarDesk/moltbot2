@@ -7,7 +7,7 @@ Three browser games, one per kid, sharing a weekly prize board.
 | `/` | the hub — game picker and joint prize board | live |
 | `/nova/` | **DANYLO: NECTAR NOVA** — 3D arena shooter | live |
 | `/fish/` | **MIKE: QUIET WATER** — fishing, three minutes at dawn | live |
-| `/city/` | **SOFIA: CITY LIGHTS** — open world, delivery jobs | not built yet |
+| `/city/` | **SOFIA: CITY LIGHTS** — open world driving, delivery shifts | live |
 
 ## Run it
 
@@ -43,28 +43,41 @@ consumer. `quality.js`, `audio.js` and `fx.js` stay duplicated per game on
 purpose: each would need a seam invented for it, and inventing a seam with one
 real consumer reliably produces one that fits nobody.
 
-Now that a second game exists, that bet can be scored. Diffing `fish/src` against
-`nova/src`:
+All three games now exist, so that bet can be scored properly. Diffing each
+game's copies against Nova's:
 
-- **`fx.js` — identical.** This one is genuinely shareable; do it when the third
-  game confirms the shape.
+- **`fx.js` — byte-identical in all three.** Confirmed by md5. This one should
+  just be moved into `shared/`; there is nothing left to learn about it.
 - **`audio.js` — synth primitives identical, everything above them different.**
   `init`, `_env`, `_tone` and `_noise` are unchanged. The scheduler's *shape* is
   reused but its numbers are not (52 bpm against 132, a longer look-ahead), and
   the sound bank and the music are wholly new. Worth splitting into an engine
   plus a per-game bank.
-- **`quality.js` — scaler identical, `apply()` and the preset flags different**,
-  exactly as predicted. A shared version needs an injected `onApply(preset)` and
-  a per-game extras bag, which is now a known shape rather than a guess.
+- **`quality.js` — scaler identical all three times; only `apply()` and the
+  per-preset scene flags differ**, exactly as predicted, three for three. The
+  shared version wants an injected `onApply(preset)` plus a per-game extras bag,
+  and there are now three real consumers to shape that around instead of one real
+  and one imagined.
 - **`touch.js` — not reused at all.** Fishing needs one contextual button, not a
   stick and five action keys. Finding out a module *shouldn't* be shared is a
   successful result, not a failure.
-- **`shared/input.js` — not reused either.** It's built on pointer lock and
-  relative deltas; the fishing game needs an absolute position on the water and
-  never grabs the cursor, so it has its own small `pointer.js`.
+- **`shared/input.js` — reused unmodified by the city, and not at all by fishing.**
+  The city is keyboard-driven and that module's pointer-lock machinery is all on
+  the mouse path, so its keyboard half worked untouched. Fishing needed an absolute
+  position on the water and never grabs the cursor, so it has its own small
+  `pointer.js`. Two consumers wanting opposite things from one module is exactly
+  the seam that shouldn't be invented.
 
-Conclusion so far: share `fx.js` and split `audio.js`; leave `quality.js` until a
-third consumer proves the callback shape; don't share input at all.
+**Conclusion now that all three exist:** move `fx.js` into `shared/` as-is; split
+`audio.js` into an engine plus a per-game bank; give `quality.js` an
+`onApply(preset)` callback and share it. Leave input alone — one game wants locked
+deltas, one wants an absolute pointer, one wants only keys, and no single module
+serves all three without a mode flag threaded through every method.
+
+That is a real result from the copy-first bet: three modules identified as worth
+sharing *with their seams already known*, and one identified as not worth sharing
+at all. Guessing at those seams after the first game would have got at least the
+input one wrong.
 
 ## Scores and the weekly prize
 
@@ -122,6 +135,14 @@ rank plus prize points · GUEST saves locally and the table says `THIS DEVICE`.
 **Nova, phone:** portrait shows the rotate screen · landscape shows the stick and
 all five buttons · auto-fire defaults on · starts on a low graphics tier and
 climbs.
+
+**City Lights:** FREE ROAM has no clock and no score · W/A/S/D drives and the
+speedo moves · SPACE breaks traction and the DRIFT indicator lights · the four
+ramps are on the roads and launch the car into the air stars · stars persist across
+a reload and unlock cars in the garage · R cycles NEON FM / SLOW LANE / OFF AIR ·
+ESC pauses · a SHIFT shows the clock, cash, streak, job card and the waypoint
+arrow · a delivery pops a cash figure and the streak climbs · the clock ends the
+shift and the screen shows five stats.
 
 **Quiet Water:** cast lands where the bright ring shows · the water name under
 the reticle changes over lilies, the dock shade and a rising ring · the float taps

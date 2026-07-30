@@ -109,6 +109,18 @@ jobs:
                    fish/src/audio.js \
                    fish/src/quality.js \
                    fish/src/fx.js \
+                   city/ \
+                   city/style.css \
+                   city/src/main.js \
+                   city/src/car.js \
+                   city/src/carmesh.js \
+                   city/src/city.js \
+                   city/src/collide.js \
+                   city/src/shift.js \
+                   city/src/hud.js \
+                   city/src/audio.js \
+                   city/src/quality.js \
+                   city/src/fx.js \
                    vendor/jsm/postprocessing/EffectComposer.js \
                    vendor/jsm/postprocessing/RenderPass.js \
                    vendor/jsm/postprocessing/UnrealBloomPass.js \

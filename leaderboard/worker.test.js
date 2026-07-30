@@ -353,6 +353,49 @@ describe("validation", () => {
 		expect(raw.entries[0].flags).toEqual([])
 	})
 
+	// The city exists now too, so all three configs are real.
+	it("accepts a realistic delivery shift", async () => {
+		const r = await post("sofia", 12_400, { deliveries: 14, stars: 22, bestRun: 9 }, "city")
+		expect(r.status).toBe(200)
+		expect((await r.json()).improved).toBe(true)
+	})
+
+	it("accepts a shift where nothing was delivered", async () => {
+		const r = await post("sofia", 0, { deliveries: 0, stars: 0, bestRun: 0 }, "city")
+		expect(r.status).toBe(200)
+	})
+
+	it("rejects more stars than the city holds", async () => {
+		const r = await post("sofia", 500, { deliveries: 2, stars: 999, bestRun: 9 }, "city")
+		expect(r.status).toBe(400)
+	})
+
+	it("rejects a delivery slower than the whole shift", async () => {
+		const r = await post("sofia", 500, { deliveries: 2, stars: 4, bestRun: 900 }, "city")
+		expect(r.status).toBe(400)
+	})
+
+	it("flags a shift score too big for the jobs done", async () => {
+		await post("sofia", 400_000, { deliveries: 3, stars: 10, bestRun: 5 }, "city")
+		const raw = JSON.parse(env.SCORES.m.get(`wk:city:${WEEK}`).value)
+		expect(raw.entries[0].flags).toContain("implausible")
+	})
+
+	it("does not flag an honest big shift", async () => {
+		await post("sofia", 30_000, { deliveries: 26, stars: 40, bestRun: 6 }, "city")
+		const raw = JSON.parse(env.SCORES.m.get(`wk:city:${WEEK}`).value)
+		expect(raw.entries[0].flags).toEqual([])
+	})
+
+	it("keeps all three games' boards separate", async () => {
+		await post("danylo", 12000)
+		await post("mike", 1651, { landed: 7, heaviest: 4748, species: 4, flow: 30 }, "fish")
+		await post("sofia", 8000, { deliveries: 9, stars: 12, bestRun: 11 }, "city")
+		expect((await top("nova")).entries.map((e) => e.player)).toEqual(["danylo"])
+		expect((await top("fish")).entries.map((e) => e.player)).toEqual(["mike"])
+		expect((await top("city")).entries.map((e) => e.player)).toEqual(["sofia"])
+	})
+
 	it("drops stats the game never declared", async () => {
 		await post("danylo", 12000, { wave: 6, kills: 40, combo: 5, secret: 99 })
 		expect((await top()).entries[0].stats).toEqual({ wave: 6, kills: 40, combo: 5 })
