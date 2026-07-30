@@ -1,0 +1,200 @@
+# Nectar Arcade — read this first
+
+Three browser games, one for each of Andriy's kids, sharing a weekly leaderboard
+that a **real cash prize** is paid against. This file is the orientation; each
+part has its own README with the detail.
+
+> The rest of this repository is the upstream OpenClaw-on-Workers project. The
+> arcade is a guest in it and lives entirely in `site/` and `leaderboard/`.
+
+| | |
+| --- | --- |
+| **Play** | https://andriynectardesk.github.io/moltbot2/ |
+| **Prize dashboard** | https://nectar-nova-scores.nectardesk.workers.dev/admin |
+| **Score API** | same host, see [`leaderboard/README.md`](leaderboard/README.md) |
+| **Local clone** | `Desktop/claude code/moltbot2` |
+
+```
+site/                 the games — see site/README.md
+  index.html …        the hub: three cards + the joint prize board
+  shared/             util, input, the score client, base.css
+  vendor/             three.js r185, shared by all three games
+  nova/               DANYLO: NECTAR NOVA   3D arena shooter
+  fish/               MIKE: QUIET WATER     3-minute fishing runs
+  city/               SOFIA: CITY LIGHTS    open-world driving
+leaderboard/          the Cloudflare Worker — see leaderboard/README.md
+```
+
+Run everything locally with `npm run site` (→ http://127.0.0.1:5180/). Tests are
+`npm test` — **336** of them, and they run in CI on every push and PR.
+
+---
+
+## Open items, in priority order
+
+**1. The PINs and dashboard password are still placeholders.** This is the one
+thing standing between the arcade and a real prize week. They are currently
+`danylo/1111`, `mike/2222`, `sofia/3333`, and the dashboard password is
+`7GjC-ZRVHb3O`. I generated those so I could verify the flow end to end; they
+were never meant to survive. Rotate with:
+
+```bash
+node -e "console.log(require('crypto').createHash('sha256').update('1234').digest('hex'))"
+npx wrangler secret put PLAYERS --config leaderboard/wrangler.jsonc
+npx wrangler secret put DASHBOARD_PASSWORD --config leaderboard/wrangler.jsonc
+```
+
+`PLAYERS` is a JSON map of player id → **SHA-256 hex of the PIN**. `wrangler
+secret put` prompts, so the real values are typed and never pass through a
+transcript.
+
+**2. No kid has played any of these games.** Not one. Every "verified" claim in
+the history is structural — tests, positions, API responses. The city shipped
+literally unplayable (see the blind spot below) and only got caught because
+Andriy screenshotted it. Nova and Quiet Water have still never been looked at by
+a human.
+
+**3. Sofia was never asked what she actually wanted.** She asked for GTA 6.
+CITY LIGHTS — a neon city, a car, and delivery jobs — is a guess at which part of
+that appealed. If the answer turns out to be missions and characters, the free
+roam half is the part worth keeping and building on. Worth ten minutes with her
+before building anything more there.
+
+---
+
+## How a prize week actually runs
+
+Weeks run **Monday 00:00 to Sunday 23:59, America/Toronto**. Each submission is
+stamped with its week when it is written, so standings can never shift depending
+on when you look.
+
+1. During the week, kids play and post scores. Each game has its own board.
+2. The **joint board** ranks on prize points, not raw scores — 12,400 Nova points
+   and a 12.4 kg carp are different units. Per game per week: 1st = 10, 2nd = 6,
+   3rd = 3, and any qualifying run = 1, stacking.
+3. On Sunday or Monday, open `/admin`, look at the standings **and the flag
+   column**, and press *Close week*. That freezes an immutable snapshot at
+   `/week/<monday>` which embeds the rules in force and every underlying entry,
+   so a kid who disputes it can check the arithmetic themselves without asking.
+4. Closing produces a **payout proposal**. It does not pay anything. Recording a
+   payout is a separate button, and handing over the cash is a human act.
+
+**Pay both prizes**: a small one for winning your own game's board, and roughly
+double for the joint board. That was a deliberate decision — it lets Danylo be
+the best shooter alive and still lose the overall prize to a sibling who dabbles
+in all three, without that feeling unfair.
+
+---
+
+## Things not to undo without reading why
+
+Each is explained at length in the file named; this is the index of decisions
+that look wrong until you know the reason.
+
+- **Prize points are a normalisation device, not an anti-cheat measure.**
+  (`leaderboard/games.js`) With three kids and three games the whole contest turns
+  on a few points, and capping a win at 10 makes the cheapest attack "beat my
+  sibling by one" — quiet and hard to spot. The actual defence is the flag
+  dashboard plus a human approving every payout. Believing the points are the
+  defence is what would tempt someone to skip the approval.
+
+- **Fewer than 2 qualifiers in a game-week ⇒ participation points only.**
+  (`leaderboard/scoring.js`) Each kid owns a game and will play it most, so
+  without this the normal outcome is one kid posting alone in their own game and
+  banking 10 points for showing up. It is one line and it is what makes the joint
+  board a contest.
+
+- **Flags accumulate for the whole week and are never cleared.**
+  (`leaderboard/worker.js`) The board row is replaced wholesale on every
+  improvement, so without this a flagged cheat is cleaned up by its own next
+  ordinary submission and the frozen week snapshot shows a spotless top score.
+
+- **A corrupt board is a 500 that refuses to write, not an empty board.**
+  (`leaderboard/worker.js`) Treating a bad shape as empty and overwriting it is
+  how a week's standings disappear silently.
+
+- **`ALLOWED_ORIGINS` does not restrict access.** It only sets a response header.
+  Another origin's write still succeeds; `curl` ignores the mechanism entirely.
+  The gate on writing is the PIN.
+
+- **The fishing fight's telegraph and surge are the entire skill.**
+  (`site/fish/src/fish.js`) Without them a thermostat that never looks at the
+  fish lands every species and does it *faster* than proper play — that was the
+  first version, and its tests certified it as skilful. There is now a
+  "punishes a thermostat" regression test. Don't remove either half without
+  re-measuring.
+
+- **Free roam in the city scores nothing and never touches the leaderboard.**
+  (`site/city/src/main.js`) It's the part that was actually asked for. Putting a
+  weekly competition on it would replace the thing that makes it good.
+
+- **The city is generated from a fixed seed.** (`site/city/src/city.js`) It used
+  to rebuild at random every load, so buildings moved and collected stars
+  reappeared in streets you'd never driven down.
+
+- **`quality.js`, `audio.js` and `fx.js` are copied per game, not shared.**
+  Deliberate, and now scored — see below.
+
+---
+
+## What the copy-first bet actually returned
+
+The rule while building was: copy a module rather than share it, until a second
+real consumer shows you where the seam belongs. With all three games built, that
+can be judged rather than argued about.
+
+| module | outcome |
+| --- | --- |
+| `fx.js` | **byte-identical in all three** (md5 confirmed). Just move it into `shared/`. |
+| `audio.js` | synth primitives identical three times; the sound bank and music are wholly new each time. Split into an engine plus a per-game bank. |
+| `quality.js` | the adaptive scaler identical three times; only `apply()` and the per-preset scene flags differ. Wants an injected `onApply(preset)` plus a per-game extras bag. |
+| `touch.js` | never reused. Fishing wants one contextual button, the city wants a keyboard. |
+| `shared/input.js` | reused unmodified by the city (keyboard only), not at all by fishing (which needs an absolute pointer and no lock). **Do not share input** — the three games want opposite things. |
+
+Three modules identified as worth sharing *with their seams already known*, and
+two identified as not worth sharing at all. Guessing after the first game would
+have got the input one wrong.
+
+---
+
+## Working on this
+
+**Deploy order matters.** The worker and the site are deployed separately, and
+the client only talks to the routes the deployed worker has. Deploy the worker
+**first**, then push to `main`:
+
+```bash
+npm run leaderboard:deploy     # worker
+git push origin main           # triggers the Pages deploy
+```
+
+**Every merge goes through an architect review of the diff.** This is a house
+rule and it has earned its place — over three games it caught: flags being erased
+by the cheat's own next submission; the joint board telling Andriy to split a
+prize the tiebreaks had already decided; the car's steering being inverted; the
+delivery waypoint pointing the wrong way at every heading but two; and a GPU leak
+that would have degraded a session gradually and been blamed on the water.
+
+**Simulate before trusting a difficulty curve.** Both games with a skill ceiling
+have their rules in a file that imports no three.js, precisely so play can be
+simulated: `site/fish/src/fish.js` and `site/city/src/car.js`. The fishing fight
+and the delivery scoring were both tuned against measured numbers, and in both
+cases the first version was wrong in a way that eyeballing would not have caught.
+
+**Watch for tests that pass for the wrong reason.** Three separate times a test
+was asserting something vacuous or measuring the wrong thing while looking
+correct — `expect(hypot(...)).toBeGreaterThan(-1)`, a turning-radius helper that
+dragged both cars to the same speed, and a tiebreak fixture whose totals differed
+so much the tiebreaks never ran. If a test has never failed, check that it *can*.
+
+### The blind spot that matters most
+
+**An agent working on this cannot see the games.** The browser pane in these
+sessions does not composite frames, so screenshots fail and the game loop has to
+be driven manually by calling `_loop()` on an interval. Everything verifiable
+this way — state, positions, scores, API responses, DOM — has been verified. What
+cannot be verified is **what it looks like**.
+
+That is exactly how CITY LIGHTS shipped opening at midnight with near-black roads
+while every structural check passed. If you change anything visual, **ask Andriy
+to look and screenshot it**. Do not report a visual change as verified.

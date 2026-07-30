@@ -4,6 +4,11 @@ Run [OpenClaw](https://github.com/openclaw/openclaw) (formerly Moltbot, formerly
 
 ![moltworker architecture](./assets/logo.png)
 
+> **This repository also hosts Nectar Arcade** — three browser games for
+> Andriy's kids plus the Cloudflare Worker behind their weekly prize board,
+> living in `site/` and `leaderboard/`. It is unrelated to OpenClaw; start at
+> [ARCADE.md](./ARCADE.md).
+
 > **Experimental:** This is a proof of concept demonstrating that OpenClaw can run in Cloudflare Sandbox. It is not officially supported and may break without notice. Use at your own risk.
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/cloudflare/moltworker)
