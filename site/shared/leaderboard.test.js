@@ -7,7 +7,8 @@
 // the arcade ships.
 
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { GUEST, Leaderboard, ROSTER, cleanName } from "./leaderboard.js"
+import { GUEST, Leaderboard, ROSTER, cleanName, normalizeName } from "./leaderboard.js"
+import { NAME_CASES } from "../../test/name-cases.js"
 
 /** Just enough localStorage to exercise the real code paths. */
 function installStorage() {
@@ -323,5 +324,143 @@ describe("cleanName", () => {
 	it("handles nothing gracefully", () => {
 		expect(cleanName(null)).toBe("")
 		expect(cleanName("   ")).toBe("")
+	})
+})
+
+// The same table the worker's own test runs against leaderboard/players.js. The
+// client's copy of the rule only exists so the signup form can complain while
+// you type; if it ever disagrees with the worker, one of these two files fails
+// with the case that differs.
+describe("normalizeName agrees with the worker", () => {
+	for (const [input, want, why] of NAME_CASES) {
+		it(`${JSON.stringify(input)} → ${JSON.stringify(want)} (${why})`, () => {
+			expect(normalizeName(input)).toBe(want)
+		})
+	}
+})
+
+describe("signing up", () => {
+	const ok = (body) => vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => body })
+
+	it("registers, then plays as that name", async () => {
+		globalThis.fetch = ok({ ok: true, player: "zoe", created: true, kind: "open" })
+		const b = new Leaderboard("nova", "https://board.test")
+
+		const res = await b.join("ZOE", "4242")
+
+		const [url, opts] = globalThis.fetch.mock.calls[0]
+		expect(url).toBe("https://board.test/join")
+		// Normalised before it leaves, so the id the player sees is the id the
+		// board will show.
+		expect(JSON.parse(opts.body)).toEqual({ player: "zoe", pin: "4242" })
+		expect(res).toMatchObject({ ok: true, player: "zoe", created: true })
+		expect(b.name).toBe("zoe")
+		expect(b.hasIdentity).toBe(true)
+		expect(b.canPost).toBe(true)
+	})
+
+	it("remembers them on this device, next to the kids", async () => {
+		globalThis.fetch = ok({ ok: true, player: "zoe", created: true })
+		const b = new Leaderboard("nova", "https://board.test")
+		await b.join("zoe", "4242")
+
+		// A different game, freshly constructed, offers the same button.
+		expect(new Leaderboard("city", "https://board.test").knownPlayers()).toEqual(["zoe"])
+	})
+
+	it("does not list the kids as device players — they have their own buttons", async () => {
+		globalThis.fetch = ok({ ok: true, player: "danylo", created: false, kind: "family" })
+		const b = new Leaderboard("nova", "https://board.test")
+		await b.join("danylo", "1111")
+		expect(b.knownPlayers()).toEqual([])
+		expect(b.name).toBe("danylo")
+	})
+
+	it("checks the obvious things before spending a request", async () => {
+		globalThis.fetch = vi.fn()
+		const b = new Leaderboard("nova", "https://board.test")
+
+		expect((await b.join("z", "4242")).ok).toBe(false)
+		expect((await b.join("1234", "4242")).ok).toBe(false)
+		expect((await b.join("guest", "4242")).ok).toBe(false)
+		expect((await b.join("zoe", "12")).ok).toBe(false)
+		expect(globalThis.fetch).not.toHaveBeenCalled()
+	})
+
+	// A mistyped PIN must not quietly log a signed-in kid out and turn their next
+	// run into a local-only guest score.
+	it("leaves the current player alone when it fails", async () => {
+		const b = new Leaderboard("nova", "https://board.test")
+		b.setName("danylo")
+		b.setPin("1111")
+
+		globalThis.fetch = vi.fn().mockResolvedValue({
+			ok: false,
+			status: 403,
+			json: async () => ({ error: "that name is taken — if it's yours, check the PIN" }),
+		})
+		const res = await b.join("zoe", "9999")
+
+		expect(res.ok).toBe(false)
+		expect(res.status).toBe(403)
+		expect(res.error).toMatch(/taken/)
+		expect(b.name).toBe("danylo")
+		expect(b.pin).toBe("1111")
+		expect(b.knownPlayers()).toEqual([])
+	})
+
+	it("keeps a typed name with no board configured, rather than posting nowhere", async () => {
+		globalThis.fetch = vi.fn()
+		const b = new Leaderboard("nova", "")
+		const res = await b.join("zoe", "4242")
+		expect(res).toMatchObject({ ok: true, player: "zoe", shared: false })
+		expect(b.name).toBe("zoe")
+		expect(b.canPost).toBe(false)
+		expect(globalThis.fetch).not.toHaveBeenCalled()
+	})
+
+	it("survives a device list that isn't a list", () => {
+		localStorage.setItem("play.players", JSON.stringify({ zoe: true }))
+		expect(new Leaderboard("nova", "https://board.test").knownPlayers()).toEqual([])
+	})
+
+	it("stops the button row growing without bound at a party", async () => {
+		globalThis.fetch = vi.fn()
+		const b = new Leaderboard("nova", "")
+		for (let i = 0; i < 12; i++) await b.join(`kid${i}`, "4242")
+		const known = b.knownPlayers()
+		expect(known).toHaveLength(8)
+		expect(known.at(-1)).toBe("kid11")
+	})
+})
+
+describe("who may post", () => {
+	// The bug this whole change exists to fix: a friend picked GUEST because it
+	// was the only thing left, and GUEST could never reach the board.
+	it("lets anyone with a name and a pin post, not just the three kids", () => {
+		const b = new Leaderboard("nova", "https://board.test")
+		b.setName("zoe")
+		b.setPin("4242")
+		expect(b.isRostered).toBe(false)
+		expect(b.hasIdentity).toBe(true)
+		expect(b.canPost).toBe(true)
+	})
+
+	it("still treats a nameless player as a guest who saves locally", () => {
+		const b = new Leaderboard("nova", "https://board.test")
+		b.setName("")
+		b.setPin("4242")
+		expect(b.hasIdentity).toBe(false)
+		expect(b.canPost).toBe(false)
+	})
+
+	it("sends the guest label with a local run", async () => {
+		globalThis.fetch = vi.fn()
+		const b = new Leaderboard("nova", "https://board.test")
+		b.setName("")
+		const res = await b.submit({ score: 900, stats: {} })
+		expect(res).toMatchObject({ ok: true, shared: false })
+		expect(b.localEntries()[0].player).toBe(GUEST)
+		expect(globalThis.fetch).not.toHaveBeenCalled()
 	})
 })

@@ -20,7 +20,8 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js"
 
 import { clamp, damp, lerp } from "../../shared/util.js"
-import { GUEST, Leaderboard } from "../../shared/leaderboard.js"
+import { Leaderboard } from "../../shared/leaderboard.js"
+import { bindIdentity } from "../../shared/identity.js"
 import { Input } from "../../shared/input.js"
 import { Audio } from "./audio.js"
 import { BLOCK, CITY_HALF, City } from "./city.js"
@@ -296,28 +297,20 @@ class Game {
 		const pinInput = $("go-pin")
 		const msg = $("go-submit-msg")
 
-		const paintRoster = () => {
-			for (const btn of document.querySelectorAll(".who")) {
-				btn.classList.toggle("on", btn.dataset.who === (this.board.name || GUEST))
-			}
-			const guest = !this.board.isRostered
-			$("go-pin-wrap").classList.toggle("hidden", guest)
-			submitBtn.textContent = guest ? "SAVE HERE" : "POST SCORE"
-		}
-
-		for (const btn of document.querySelectorAll(".who")) {
-			btn.onclick = () => {
-				const who = btn.dataset.who
-				if (who !== this.board.name) this.board.forgetPin()
-				this.board.setName(who === GUEST ? "" : who)
-				pinInput.value = this.board.pin
+		// The strip of names, the signup form and the PIN field are shared across
+		// all three games — one identity for the whole arcade.
+		this._identity = bindIdentity({
+			board: this.board,
+			row: document.querySelector(".who-row"),
+			pinWrap: $("go-pin-wrap"),
+			pinInput,
+			onChange: () => {
 				msg.textContent = ""
 				msg.classList.remove("warn")
-				paintRoster()
-			}
-		}
-
-		pinInput.value = this.board.pin
+				// A guest plays for themselves; there's nothing to prove.
+				submitBtn.textContent = this.board.hasIdentity ? "POST SCORE" : "SAVE HERE"
+			},
+		})
 		pinInput.addEventListener("keydown", (e) => {
 			e.stopPropagation()
 			if (e.key === "Enter") submitBtn.click()
@@ -325,7 +318,7 @@ class Game {
 
 		submitBtn.onclick = async () => {
 			if (this._submitted) return
-			if (this.board.isRostered) {
+			if (this.board.hasIdentity) {
 				const pin = pinInput.value.trim()
 				if (!pin) {
 					msg.textContent = "ENTER YOUR PIN"
@@ -388,8 +381,6 @@ class Game {
 			}
 			this.refreshTitleBoard()
 		}
-
-		paintRoster()
 	}
 
 	_renderBoard(el, entries, { shared, highlightAt = null, title }) {
@@ -526,8 +517,9 @@ class Game {
 		$("go-submit-msg").textContent = ""
 		$("go-submit-msg").classList.remove("warn")
 		$("btn-submit").disabled = false
-		$("btn-submit").textContent = this.board.isRostered ? "POST SCORE" : "SAVE HERE"
-		$("go-pin-wrap").classList.toggle("hidden", !this.board.isRostered)
+		// Repaints the name strip and sets the submit button to match who is
+		// playing — a friend may have signed up since the last run.
+		this._identity.refresh()
 
 		this.board
 			.top(8)

@@ -5,12 +5,16 @@ A small Cloudflare Worker backing the weekly score boards for the three games in
 joint board sums prize points across all three.
 
 Free tier covers this comfortably. KV allows 100k reads and 1k writes a day, and
-an accepted submission costs exactly one write — capped, by design, at
-3 players × 3 games × 50 accepted runs = **450 writes per week, maximum, ever.**
+an accepted submission costs exactly one write. With only the family playing
+that is 3 players × 3 games × 50 accepted runs = 450 writes a week. Open signup
+raises the ceiling to the registry cap, 63 players × 3 × 50, so the real bound
+is now `LIMITS.maxOpenPlayers` in `players.js` — worth remembering before
+raising it.
 
 | File | What it is |
 | --- | --- |
 | `worker.js` | routes, storage, identity, the dashboard mount |
+| `players.js` | who may post: the naming rules and the self-signup registry |
 | `week.js` | week boundaries (pure) |
 | `games.js` | the game registry, prize points, validation limits |
 | `scoring.js` | ranking, places, joint standings (pure) |
@@ -25,8 +29,10 @@ npx wrangler kv namespace create SCORES --config leaderboard/wrangler.jsonc
 # paste the printed id into wrangler.jsonc
 ```
 
-Then set the two secrets. The roster maps a player id to the **SHA-256 hex of
-their PIN** — the PIN itself is never stored:
+Then set the two secrets. `PLAYERS` is the **family** roster only — the three
+kids — mapping a player id to the **SHA-256 hex of their PIN**; the PIN itself is
+never stored. Everyone else signs themselves up at `POST /join` and lands in KV,
+so they never appear here:
 
 ```bash
 node -e "console.log(require('crypto').createHash('sha256').update('1234').digest('hex'))"
@@ -51,12 +57,15 @@ Put the printed URL in [`site/shared/config.js`](../site/shared/config.js) as
 | `GET /games` | `{ games: [{id, label}], week }` |
 | `GET /g/:game/top?week=current&limit=20` | this week's board for one game |
 | `POST /g/:game/score` | body `{player, pin, score, stats, durationMs?}` → `{improved, rank, points, entries}` |
+| `POST /join` | body `{player, pin}` → claim a name, or sign back in to one you own |
 | `GET /joint?week=current` | joint standings plus each game's places |
 | `GET /week/:monday` | the frozen snapshot of a closed week — public, so a kid can check the maths |
 | `GET /admin` | the dashboard (Basic auth) |
 | `POST /admin/close` | freeze a week, return a payout proposal |
 | `POST /admin/payout` | write down a payment that was made |
 | `GET /admin/history` | closed weeks and payouts |
+| `GET /admin/players` | family vs. self-registered, and how many slots are left |
+| `POST /admin/player/remove` | body `{player, week}` → delete a self-registered player and their scores for that week |
 
 `stats` is a free-form bag per game — the shooter sends `{wave, kills, combo}`,
 fishing sends `{landed, heaviest, species, flow}`. Each game declares its own
@@ -97,6 +106,29 @@ Joint ties break on: most wins, then most games played, then earliest last
 qualifying run. Still level after that is a real tie and the prize gets split by
 hand.
 
+## Who may play
+
+Two registries, and once a player exists they are treated identically — same
+board, same prize points, same joint standings.
+
+- **family** — the three kids, in the `PLAYERS` secret. Their names always exist
+  and cannot be claimed by anyone else, because the secret is checked first.
+- **open** — everyone else. A friend types a name and a PIN on the game-over
+  screen, `POST /join` creates them in KV, and they are playing for the same cash
+  as the kids. This was an explicit decision, not a default.
+
+`POST /join` both creates and signs in: a wrong PIN on a name that exists reads
+exactly like any other refusal, so it cannot be used to find out who has an
+account. It is throttled per IP (10 tries per 10 minutes), names are capped at
+`maxOpenPlayers`, and reserved words like `guest` are refused.
+
+**Signup is open to the internet.** Anyone with the URL can register, which means
+someone unknown could end up in a payout proposal. What stands against that: the
+dashboard marks every non-family player as a `visitor` in the standings, and the
+Players section removes one — deleting the account and their scores for the week
+in view. A week that has already been closed keeps whatever it froze; frozen
+history is not editable, deliberately.
+
 ## Honest limits
 
 **Scores cannot be verified, and never will be here.** The games are JavaScript
@@ -107,8 +139,8 @@ destroy what makes these games good to tinker with.
 
 What is done instead:
 
-- **Submissions are attributed.** A roster PIN means nobody can post under a
-  sibling's name or overwrite their row. A four-digit PIN between kids who share
+- **Submissions are attributed.** A PIN means nobody can post under another
+  player's name or overwrite their row. A four-digit PIN between kids who share
   a house is weak — one will watch another type it — so understand what it buys:
   not secrecy, but accountability by default. It turns impersonation from an
   accident into a deliberate act.

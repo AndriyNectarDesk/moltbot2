@@ -15,6 +15,10 @@ import { LEADERBOARD_URL } from "./config.js"
 // shared across games
 const NAME_KEY = "play.name"
 const PIN_KEY = "play.pin"
+// Names that have signed in on THIS device, so a friend who visits twice gets a
+// button instead of the signup form. Never the source of truth about who exists
+// — the worker is — just a convenience for a shared family laptop.
+const KNOWN_KEY = "play.players"
 // per game
 const scoresKey = (game) => `play.scores.${game}`
 
@@ -25,10 +29,22 @@ const LEGACY_SCORES_KEY = "nectarnova.scores"
 const MAX_LOCAL = 20
 const TIMEOUT_MS = 6000
 
-/** Who may appear on the shared board. Anyone else plays as a guest. */
+/**
+ * The three kids. Their PINs live in a server secret, so these names always
+ * exist and can never be claimed by anyone else — which is why they get fixed
+ * buttons while everybody else has to type a name.
+ *
+ * This is no longer the list of who may post. Anyone can sign up from the
+ * game-over screen and compete for the same prize; see `join`.
+ */
 export const ROSTER = ["danylo", "mike", "sofia"]
 
 export const GUEST = "guest"
+
+/** Matches the rules the worker enforces in leaderboard/players.js. */
+export const NAME_MIN = 2
+export const NAME_MAX = 14
+export const RESERVED = ["guest", "anon", "admin", "player", "nobody", "you"]
 
 /** localStorage throws in private mode and inside some embedded webviews. */
 function readStore(key, fallback) {
@@ -90,10 +106,37 @@ function migrateLegacy(game) {
 
 /** Names go on a shared board, so keep them short and printable. */
 export function cleanName(raw) {
-	return String(raw || "")
+	return String(raw ?? "")
+		.normalize("NFKC")
 		.replace(/[^\p{L}\p{N} _\-.]/gu, "")
+		.replace(/\s+/g, " ")
 		.trim()
-		.slice(0, 14)
+		.slice(0, NAME_MAX)
+}
+
+/**
+ * The id a name becomes, or "" if it can't be one.
+ *
+ * A copy of the worker's rule, kept here so the signup form can say "too short"
+ * while you type instead of after a round trip. The worker still decides — this
+ * copy is allowed to be wrong, and the only cost of that is a nicer error
+ * arriving a moment later.
+ *
+ * Lowercase because the board is keyed on this string, so ZOE and zoe have to be
+ * one player. A letter is required because an all-digit name reads as a score.
+ */
+export function normalizeName(raw) {
+	// Not text, not a name — String({}) would otherwise become "object object".
+	if (typeof raw !== "string") return ""
+	const name = cleanName(raw).toLowerCase().slice(0, NAME_MAX).trim()
+	if (name.length < NAME_MIN) return ""
+	if (!/\p{L}/u.test(name)) return ""
+	return name
+}
+
+/** Why this PIN won't do, or null. Digits only — every phone keypad has those. */
+export function pinProblem(pin) {
+	return /^\d{4,8}$/.test(String(pin ?? "")) ? null : "PIN must be 4 to 8 digits"
 }
 
 export class Leaderboard {
@@ -110,25 +153,61 @@ export class Leaderboard {
 		this.pin = readStore(PIN_KEY, "") || ""
 	}
 
+	/**
+	 * Names that have signed in on this device and aren't one of the kids.
+	 *
+	 * Rendered as extra buttons next to the three, so the friend who came last
+	 * Saturday taps their name and types their PIN rather than signing up twice
+	 * and finding the name already taken.
+	 */
+	knownPlayers() {
+		const rows = readStore(KNOWN_KEY, [])
+		if (!Array.isArray(rows)) return []
+		return rows.filter((n) => typeof n === "string" && n && !ROSTER.includes(n))
+	}
+
+	_remember(name) {
+		if (!name || ROSTER.includes(name)) return
+		const rows = this.knownPlayers()
+		if (rows.includes(name)) return
+		rows.push(name)
+		// Oldest first, newest last, and bounded — a shared laptop at a party
+		// should not grow an unbounded row of buttons.
+		writeStore(KNOWN_KEY, rows.slice(-8))
+	}
+
+	forgetPlayer(name) {
+		writeStore(KNOWN_KEY, this.knownPlayers().filter((n) => n !== name))
+	}
+
 	/** Is a remote board configured at all? (Not "did the last call reach it".) */
 	get shared() {
 		return Boolean(this.url)
 	}
 
-	/** A roster player can post to the shared board; a guest is local-only. */
+	/** One of the three kids, whose PIN lives in the server secret. */
 	get isRostered() {
 		return ROSTER.includes(this.name)
 	}
 
+	/**
+	 * Playing as somebody rather than as a guest.
+	 *
+	 * This is the gate the game-over screen asks about, and it used to be
+	 * `isRostered` — which is why a friend could only ever save locally. Whether
+	 * the name is genuinely registered is the worker's call, made when the score
+	 * is posted; guessing here would only mean two places to be wrong.
+	 */
+	get hasIdentity() {
+		return Boolean(this.name)
+	}
+
 	get canPost() {
-		return this.shared && this.isRostered && Boolean(this.pin)
+		return this.shared && this.hasIdentity && Boolean(this.pin)
 	}
 
 	setName(name) {
-		const clean = ROSTER.includes(String(name).toLowerCase())
-			? String(name).toLowerCase()
-			: cleanName(name)
-		this.name = clean
+		this.name = normalizeName(name)
 		writeStore(NAME_KEY, this.name)
 		return this.name
 	}
@@ -143,6 +222,62 @@ export class Leaderboard {
 	forgetPin() {
 		this.pin = ""
 		writeStore(PIN_KEY, "")
+	}
+
+	// ------------------------------------------------------------ signing in
+
+	/**
+	 * Claim a name, or sign back in to one you already own.
+	 *
+	 * Deliberately one call for both. From the player's side there is no
+	 * difference — you type your name and your PIN — and a friend on a new device
+	 * would otherwise have to know which of two buttons applied to them.
+	 *
+	 * On success this device is that player until somebody taps another name.
+	 * Failure changes nothing: the previous identity is left exactly as it was,
+	 * so a mistyped PIN can't quietly turn a signed-in kid into a guest.
+	 *
+	 * Returns `{ ok, player, created, error }`.
+	 */
+	async join(name, pin) {
+		const player = normalizeName(name)
+		if (!player) {
+			return { ok: false, error: `pick a name: ${NAME_MIN}–${NAME_MAX} characters, at least one letter` }
+		}
+		if (RESERVED.includes(player)) return { ok: false, error: "that name is reserved — pick another" }
+		const badPin = pinProblem(pin)
+		if (badPin) return { ok: false, error: badPin }
+
+		if (!this.shared) {
+			// No board configured at all: there is nothing to register with, but the
+			// name is still worth keeping so the local table isn't full of "guest".
+			this.setName(player)
+			this.setPin(String(pin))
+			this._remember(player)
+			return { ok: true, player, created: false, shared: false }
+		}
+
+		let data
+		try {
+			data = await this._fetch("/join", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ player, pin: String(pin) }),
+			})
+			this.lastError = null
+		} catch (err) {
+			this.lastError = err.message || String(err)
+			return {
+				ok: false,
+				status: err.status || 0,
+				error: err.detail || err.message || "could not reach the board",
+			}
+		}
+
+		this.setName(data.player || player)
+		this.setPin(String(pin))
+		this._remember(this.name)
+		return { ok: true, player: this.name, created: Boolean(data.created), shared: true }
 	}
 
 	// ------------------------------------------------------------ local table

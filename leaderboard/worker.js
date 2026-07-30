@@ -29,6 +29,19 @@
 
 import { EYEBROW, FLAGS, GAME_IDS, GAMES, POINTS, RATE, cleanStats, validate } from "./games.js"
 import { gameStandings, jointStandings, payoutProposal, rankEntries } from "./scoring.js"
+import {
+	LIMITS,
+	PlayerShapeError,
+	RESERVED,
+	joinThrottle,
+	normalizeName,
+	pinProblem,
+	readIndex,
+	readPlayer,
+	registerPlayer,
+	removePlayer,
+	touchIndex,
+} from "./players.js"
 import { isWeekKey, nextWeek, weekHasEnded, weekKey } from "./week.js"
 import { renderAdmin } from "./admin.js"
 
@@ -139,32 +152,111 @@ async function readAllBoards(env, week) {
 
 // ---------------------------------------------------------------- identity
 
+/** The family roster from the secret, or null if it is unparseable. */
+function familyRoster(env) {
+	try {
+		return JSON.parse(env.PLAYERS || "{}")
+	} catch {
+		return null
+	}
+}
+
 /**
  * Who is submitting.
  *
- * PLAYERS is a secret: { "danylo": "<sha256 of pin>", ... }. Free-text names are
- * gone, which also removes v1's habit of collapsing every unnameable player
- * onto one shared "ANON" row.
+ * Two registries, checked in that order. PLAYERS is a secret Andriy controls:
+ * { "danylo": "<sha256 of pin>", ... }. Everyone else is looked up in KV, where
+ * they put themselves via /join. A family name can therefore never be claimed by
+ * a stranger — the secret is consulted first and /join refuses to create over it.
  *
  * A four-digit PIN between siblings who share a house is weak — one of them will
  * watch another type it. Its job isn't secrecy, it's attribution: it turns
  * posting as your brother from an accident (wrong name picked on a shared
- * device) into something you have to decide to do.
+ * device) into something you have to decide to do. For a visiting friend it does
+ * one more thing: it stops the next visitor from posting onto their row.
  */
 async function authPlayer(env, body) {
-	let roster
-	try {
-		roster = JSON.parse(env.PLAYERS || "{}")
-	} catch {
-		return { error: "server roster misconfigured", status: 500 }
-	}
-	const player = String(body.player || "").toLowerCase().trim()
+	const roster = familyRoster(env)
+	if (!roster) return { error: "server roster misconfigured", status: 500 }
+
+	const player = normalizeName(body.player)
 	if (!player) return { error: "no player", status: 403 }
-	const want = roster[player]
-	if (!want) return { error: "unknown player", status: 403 }
 	const got = await sha256hex(body.pin || "")
-	if (!timingSafeEqual(got, String(want).toLowerCase())) return { error: "wrong pin", status: 403 }
-	return { player }
+
+	const want = roster[player]
+	if (want) {
+		if (!timingSafeEqual(got, String(want).toLowerCase())) return { error: "wrong pin", status: 403 }
+		return { player, kind: "family" }
+	}
+
+	const record = await readPlayer(env, player)
+	if (!record) return { error: "unknown player", status: 403 }
+	if (!timingSafeEqual(got, String(record.pinHash).toLowerCase())) return { error: "wrong pin", status: 403 }
+	return { player, kind: "open" }
+}
+
+/**
+ * Claim a name, or prove you already own it.
+ *
+ * One route for both because from the player's side they are one act — you type
+ * your name and your PIN and you are in. A friend on a new device, or after
+ * clearing their browser, takes the same path they took the first time and it
+ * just works. `created` tells the client which of the two happened so it can say
+ * so, but nothing depends on it.
+ *
+ * A wrong PIN on an existing name is deliberately indistinguishable from any
+ * other refusal to claim it: "that name is taken" either way, so this cannot be
+ * used to enumerate who has an account.
+ */
+async function handleJoin(request, env, origin) {
+	let body
+	try {
+		body = await request.json()
+	} catch {
+		return json({ error: "invalid JSON" }, 400, origin)
+	}
+
+	const player = normalizeName(body.player)
+	if (!player) {
+		return json(
+			{ error: `pick a name: ${LIMITS.nameMin}–${LIMITS.nameMax} characters, at least one letter` },
+			400,
+			origin,
+		)
+	}
+	if (RESERVED.has(player)) return json({ error: "that name is reserved — pick another" }, 400, origin)
+	const badPin = pinProblem(body.pin)
+	if (badPin) return json({ error: badPin }, 400, origin)
+
+	const roster = familyRoster(env)
+	if (!roster) return json({ error: "server roster misconfigured" }, 500, origin)
+
+	// Throttle before either lookup, so the failure path costs one KV read.
+	const limited = await joinThrottle(env, request)
+	if (limited) return json({ error: limited }, 429, origin)
+
+	const hash = await sha256hex(body.pin)
+	const taken = { error: "that name is taken — if it's yours, check the PIN", status: 403 }
+
+	const family = roster[player]
+	if (family) {
+		if (!timingSafeEqual(hash, String(family).toLowerCase())) return json({ error: taken.error }, taken.status, origin)
+		return json({ ok: true, player, created: false, kind: "family" }, 200, origin)
+	}
+
+	const existing = await readPlayer(env, player)
+	if (existing) {
+		if (!timingSafeEqual(hash, String(existing.pinHash).toLowerCase())) {
+			return json({ error: taken.error }, taken.status, origin)
+		}
+		// Repairs a signup whose index write didn't land; a no-op otherwise.
+		await touchIndex(env, player, existing.createdAt || nowMs(env))
+		return json({ ok: true, player, created: false, kind: "open" }, 200, origin)
+	}
+
+	const made = await registerPlayer(env, { id: player, pinHash: hash, at: nowMs(env) })
+	if (made.error) return json({ error: made.error }, made.status, origin)
+	return json({ ok: true, player, created: true, kind: "open" }, 200, origin)
 }
 
 // ---------------------------------------------------------------- projections
@@ -517,6 +609,67 @@ async function handlePayout(request, env) {
 	return adminJson({ ok: true, recorded: item })
 }
 
+/**
+ * Remove a self-registered player, and take this week's scores with them.
+ *
+ * Signup is open to anyone who finds the URL, so this is the counterweight: the
+ * one button that gets a stranger off a board a cash prize is riding on. It
+ * clears the CURRENT week only, and deliberately never touches a frozen
+ * snapshot — a week that has been closed is history, and history that can be
+ * edited is worth nothing to a kid disputing a payout.
+ *
+ * Family players are refused: their PINs live in a secret, so removing the KV
+ * record would delete nothing and imply otherwise.
+ */
+async function handleRemovePlayer(request, env) {
+	let body
+	try {
+		body = await request.json()
+	} catch {
+		return adminJson({ error: "invalid JSON" }, 400)
+	}
+	const id = normalizeName(body.player)
+	if (!id) return adminJson({ error: "bad player" }, 400)
+
+	const roster = familyRoster(env)
+	if (!roster) return adminJson({ error: "server roster misconfigured" }, 500)
+	if (roster[id]) {
+		return adminJson({ error: "family players live in the PLAYERS secret — edit it with wrangler" }, 400)
+	}
+
+	// The dashboard can be looking at an older week than today's, so it says which
+	// one it means rather than letting the two disagree about what got cleared.
+	const week = String(body.week || "") || weekKey(nowMs(env))
+	if (!isWeekKey(week)) return adminJson({ error: "bad week" }, 400)
+	if (await env.SCORES.get(finalKey(week))) {
+		return adminJson({ error: `week ${week} is closed — its standings are frozen`, week }, 409)
+	}
+
+	const removed = await removePlayer(env, id)
+	const cleared = {}
+	for (const gameId of GAME_IDS) {
+		const board = await readBoard(env, gameId, week)
+		const kept = board.entries.filter((e) => e.player !== id)
+		if (kept.length !== board.entries.length) {
+			cleared[gameId] = board.entries.length - kept.length
+			board.entries = kept
+			await writeBoard(env, board)
+		}
+	}
+	return adminJson({ ok: true, player: id, removed, week, cleared })
+}
+
+/** Everyone who can post, and which of the two registries they came from. */
+async function adminPlayers(env) {
+	const roster = familyRoster(env) || {}
+	const index = await readIndex(env)
+	return {
+		family: Object.keys(roster).sort(),
+		open: index.players,
+		max: LIMITS.maxOpenPlayers,
+	}
+}
+
 async function handleAdminHistory(env) {
 	const index = await readJson(env, "weeks:index", { v: 1, weeks: [] }, isWeekIndex)
 	const log = await readJson(env, "payouts:log", { v: 1, items: [] }, isPayoutLog)
@@ -567,6 +720,7 @@ export default {
 							closedAt: snapshot ? snapshot.closedAt : null,
 							ended: weekHasEnded(week, nowMs(env)),
 							payouts: log.items.filter((p) => p.week === week),
+							players: await adminPlayers(env),
 						}),
 					)
 				}
@@ -579,10 +733,16 @@ export default {
 				if (request.method === "POST" && path.startsWith("/admin/")) {
 					if (request.headers.get("X-Prize-Admin") !== "1") {
 						return adminJson({ error: "missing X-Prize-Admin header" }, 403)
-					}
+				}
 				}
 				if (request.method === "POST" && path === "/admin/close") return await handleClose(env, url)
 				if (request.method === "POST" && path === "/admin/payout") return await handlePayout(request, env)
+				if (request.method === "POST" && path === "/admin/player/remove") {
+					return await handleRemovePlayer(request, env)
+				}
+				if (request.method === "GET" && path === "/admin/players") {
+					return adminJson(await adminPlayers(env))
+				}
 				if (request.method === "GET" && path === "/admin/history") return await handleAdminHistory(env)
 				return adminJson({ error: "not found" }, 404)
 			}
@@ -600,7 +760,11 @@ export default {
 				return await handleJoint(env, origin, url)
 			}
 
-			const weekMatch = path.match(/^\/week\/([^/]+)$/)
+				if (request.method === "POST" && path === "/join") {
+					return await handleJoin(request, env, origin)
+				}
+
+				const weekMatch = path.match(/^\/week\/([^/]+)$/)
 			if (request.method === "GET" && weekMatch) {
 				if (!isWeekKey(weekMatch[1])) return json({ error: "bad week" }, 400, origin)
 				const snapshot = await readJson(env, finalKey(weekMatch[1]), null)
@@ -620,11 +784,13 @@ export default {
 
 			return json({ error: "not found" }, 404, origin)
 		} catch (err) {
-			if (err instanceof BoardShapeError) {
+			if (err instanceof BoardShapeError || err instanceof PlayerShapeError) {
 				// Loud on purpose. The alternative is treating a corrupt board as
 				// empty and then overwriting it, which would destroy a week of
-				// scores that money depends on.
-				return json({ error: "stored board is corrupt", key: err.key }, 500, origin)
+				// scores that money depends on. A corrupt player registry is the
+				// same bet: read as empty, it would un-register every friend and
+				// leave their names free for anyone to claim.
+				return json({ error: "stored data is corrupt", key: err.key }, 500, origin)
 			}
 			throw err
 		}

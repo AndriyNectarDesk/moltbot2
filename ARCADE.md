@@ -17,7 +17,7 @@ part has its own README with the detail.
 ```
 site/                 the games — see site/README.md
   index.html …        the hub: three cards + the joint prize board
-  shared/             util, input, the score client, base.css
+  shared/             util, input, the score client, identity strip, base.css
   vendor/             three.js r185, shared by all three games
   nova/               DANYLO: NECTAR NOVA   3D arena shooter
   fish/               MIKE: QUIET WATER     3-minute fishing runs
@@ -26,11 +26,17 @@ leaderboard/          the Cloudflare Worker — see leaderboard/README.md
 ```
 
 Run everything locally with `npm run site` (→ http://127.0.0.1:5180/). Tests are
-`npm test` — **336** of them, and they run in CI on every push and PR.
+`npm test` — **407** of them, and they run in CI on every push and PR.
 
 ---
 
 ## Open items, in priority order
+
+**0. Signup is open to the internet.** Anyone who finds the URL can register a
+name and a PIN from the game-over screen and, by explicit decision, competes for
+the same cash as the kids — see "Who may play" below for what stands against a
+stranger landing in a payout. Before the first real prize week, look at the
+Players section of `/admin` the same way you look at the flag column.
 
 **1. The PINs and dashboard password are still placeholders.** This is the one
 thing standing between the arcade and a real prize week. They are currently
@@ -86,6 +92,34 @@ in all three, without that feeling unfair.
 
 ---
 
+## Who may play
+
+Two registries. Once a player exists, both kinds are treated identically — same
+board, same prize points, same joint standings, same payout proposal.
+
+- **family** — Danylo, Mike and Sofia, in the `PLAYERS` secret. Their names
+  always exist and nobody else can claim them.
+- **open** — the friends the kids bring home. They tap **+ NEW PLAYER** on the
+  game-over screen, pick a name and a PIN, and they are in.
+
+Full equality was asked for deliberately. It means a friend who plays all three
+games once can take the joint prize on their first afternoon, which is a real
+thing that can happen and not a bug.
+
+Because signup is open to anyone with the URL, two things carry the weight:
+
+1. **The dashboard marks them.** Every non-family name in the standings carries a
+   `visitor` badge, decided by "not in the secret" rather than "in the registry",
+   so someone removed but still holding scores does not quietly read as a kid.
+2. **The Players section removes one.** That deletes the account and their scores
+   for the week on screen. It refuses on a closed week, and refuses for family —
+   whose PINs are in a secret and cannot be changed from a web page.
+
+Guards that exist without needing a decision: signup is throttled per IP (10
+tries per 10 minutes, so a 4-digit PIN takes about two weeks to walk), the
+registry caps at 60 self-registered players, and `guest` and friends are
+reserved.
+
 ## Things not to undo without reading why
 
 Each is explained at length in the file named; this is the index of decisions
@@ -116,6 +150,20 @@ that look wrong until you know the reason.
 - **`ALLOWED_ORIGINS` does not restrict access.** It only sets a response header.
   Another origin's write still succeeds; `curl` ignores the mechanism entirely.
   The gate on writing is the PIN.
+
+- **`/join` says "that name is taken" for a wrong PIN on a name that exists.**
+  (`leaderboard/worker.js`) Identical wording to claiming a kid's name, on
+  purpose: a more helpful message would turn the signup box into a way to find
+  out who has an account and then guess at their PIN.
+
+- **Removing a player never touches a closed week.** (`leaderboard/worker.js`)
+  The frozen snapshot is what a kid checks the arithmetic against. Editing it
+  would make every past week worth exactly as much as your word.
+
+- **The client's copy of the name rule is not the authority.**
+  (`site/shared/leaderboard.js`) It exists so the form can complain while you
+  type. `leaderboard/players.js` decides, and `test/name-cases.js` is run against
+  both so they cannot drift silently.
 
 - **The fishing fight's telegraph and surge are the entire skill.**
   (`site/fish/src/fish.js`) Without them a thermostat that never looks at the
@@ -150,6 +198,7 @@ can be judged rather than argued about.
 | `quality.js` | the adaptive scaler identical three times; only `apply()` and the per-preset scene flags differ. Wants an injected `onApply(preset)` plus a per-game extras bag. |
 | `touch.js` | never reused. Fishing wants one contextual button, the city wants a keyboard. |
 | `shared/input.js` | reused unmodified by the city (keyboard only), not at all by fishing (which needs an absolute pointer and no lock). **Do not share input** — the three games want opposite things. |
+| `shared/identity.js` | shared from the start, and the exception that proves the rule: identity is one fact across the arcade, so three copies would be three chances for the three games to disagree about who you are. |
 
 Three modules identified as worth sharing *with their seams already known*, and
 two identified as not worth sharing at all. Guessing after the first game would

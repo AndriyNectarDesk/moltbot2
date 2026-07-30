@@ -29,13 +29,24 @@ const when = (ms) =>
 		minute: "2-digit",
 	}).format(new Date(ms))
 
-function gameTable(gameId, info) {
+/**
+ * A player's name, marked when they are not family.
+ *
+ * Anyone not in the PLAYERS secret is a visitor, including one who has since
+ * been removed from the registry but still has scores on this week's board.
+ * Deciding it by "not family" rather than "in the open list" is what makes that
+ * second case show up rather than pass as a kid.
+ */
+const namer = (family) => (id) =>
+	family.has(id) ? esc(id) : `${esc(id)} <span class="visitor">visitor</span>`
+
+function gameTable(gameId, info, who) {
 	const rows = info.places
 		.map(
 			(p) => `
 			<tr class="${p.place === 1 ? "win" : ""}">
 				<td class="pl">${p.place}</td>
-				<td class="who">${esc(p.player)}</td>
+				<td class="who">${who(p.player)}</td>
 				<td class="sc">${p.score.toLocaleString("en-CA")}</td>
 				<td class="st">${esc(GAMES[gameId].brag(p.stats || {}) || "")}</td>
 				<td class="pt">${p.points}</td>
@@ -65,13 +76,53 @@ function gameTable(gameId, info) {
 	</section>`
 }
 
-export function renderAdmin({ week, proposal, closed, closedAt, ended, payouts }) {
+/**
+ * Who can post, split by where they came from.
+ *
+ * This section exists because signup is open: anybody who finds the URL can put
+ * themselves on a board a cash prize is paid against. Family comes from the
+ * PLAYERS secret and cannot be touched from here; everyone else registered
+ * themselves and can be removed, which also clears their scores from the week in
+ * view — the only way to get a stranger off the standings before you close.
+ */
+function playersSection(players) {
+	const family = players.family
+		.map((id) => `<li><b>${esc(id)}</b> <span class="dim">family</span></li>`)
+		.join("")
+
+	const open = players.open.length
+		? players.open
+				.map(
+					(p) => `<li>
+					<b>${esc(p.id)}</b>
+					<span class="dim">signed up ${esc(when(p.at))}</span>
+					<button class="tiny" onclick="drop(${JSON.stringify(p.id)})">remove</button>
+				</li>`,
+				)
+				.join("")
+		: `<li class="note">nobody has signed themselves up yet</li>`
+
+	return `
+	<section>
+		<h2>Players</h2>
+		<ul class="players">${family}${open}</ul>
+		<p class="note">
+			${players.open.length} of ${players.max} self-signup slots used. Removing a player deletes
+			their account and their scores in the week shown above; a week already closed keeps whatever
+			it froze.
+		</p>
+	</section>`
+}
+
+export function renderAdmin({ week, proposal, closed, closedAt, ended, payouts, players }) {
+	const who = namer(new Set(players.family))
+
 	const jointRows = proposal.joint
 		.map(
 			(p, i) => `
 		<tr class="${i === 0 ? "win" : ""}">
 			<td class="pl">${i + 1}</td>
-			<td class="who">${esc(p.player)}</td>
+			<td class="who">${who(p.player)}</td>
 			<td class="pt big">${p.total}</td>
 			<td class="brk">${GAME_IDS.map((g) => (p.perGame[g] ? `${g} ${p.perGame[g].points}` : "")).filter(Boolean).join(" &middot; ")}</td>
 		</tr>`,
@@ -123,6 +174,12 @@ export function renderAdmin({ week, proposal, closed, closedAt, ended, payouts }
 	code { background: #171233; padding: 1px 5px; border-radius: 3px; font-size: 12px; }
 	ul.paid { margin: 6px 0; padding-left: 18px; }
 	.warn { color: #ffb347; font-size: 12px; }
+	.visitor { display: inline-block; background: #12203a; color: #9fd0ff; border: 1px solid #24406e;
+		border-radius: 3px; padding: 0 5px; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; }
+	ul.players { list-style: none; margin: 6px 0; padding: 0; }
+	ul.players li { display: flex; align-items: center; gap: 10px; padding: 5px 0;
+		border-bottom: 1px solid var(--line); }
+	button.tiny { margin-left: auto; font-size: 11px; padding: 3px 9px; }
 </style>
 </head><body><div class="wrap">
 
@@ -147,7 +204,9 @@ ${
 }
 ${jointRows ? `<table><thead><tr><th>#</th><th>player</th><th>pts</th><th>from</th></tr></thead><tbody>${jointRows}</tbody></table>` : `<p class="note">no qualifying runs yet this week</p>`}
 
-${GAME_IDS.map((id) => gameTable(id, proposal.perGame[id])).join("")}
+${GAME_IDS.map((id) => gameTable(id, proposal.perGame[id], who)).join("")}
+
+${playersSection(players)}
 
 <h2>Paid out</h2>
 ${paid}
@@ -173,6 +232,17 @@ ${paid}
 		const r = await fetch("/admin/close?week=" + week + (force ? "&force=1" : ""), { method: "POST", headers: { "X-Prize-Admin": "1" } })
 		const d = await r.json()
 		alert(r.ok ? "Closed. Winner: " + (d.proposal.jointWinner || "nobody") : "Failed: " + d.error)
+		if (r.ok) location.reload()
+	}
+	async function drop(player) {
+		if (!confirm("Remove " + player + " and delete their scores for week " + week + "?")) return
+		const r = await fetch("/admin/player/remove", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", "X-Prize-Admin": "1" },
+			body: JSON.stringify({ player, week }),
+		})
+		const d = await r.json()
+		alert(r.ok ? "Removed " + player + "." : "Failed: " + d.error)
 		if (r.ok) location.reload()
 	}
 	async function pay() {

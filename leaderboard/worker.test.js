@@ -58,6 +58,10 @@ function makeKV(clock = () => NOW) {
 				expiresAt: opts.expirationTtl ? clock() + opts.expirationTtl * 1000 : null,
 			})
 		},
+		async delete(k) {
+			writes++
+			m.delete(k)
+		},
 	}
 }
 
@@ -833,5 +837,185 @@ describe("payouts", () => {
 	it("rejects a bad amount or week", async () => {
 		expect((await admin("POST", "/admin/payout", { week: WEEK, player: "mike", amount: -1 })).status).toBe(400)
 		expect((await admin("POST", "/admin/payout", { week: "nope", player: "mike", amount: 5 })).status).toBe(400)
+	})
+})
+
+// ------------------------------------------------------------ open signup
+//
+// The three kids are in a secret. Everyone else — the friends they bring home —
+// signs themselves up here and competes for the same prize, which is what these
+// tests are really guarding: an open player is not a second-class one.
+
+const join = (player, pin, headers = {}) => call("POST", "/join", { player, pin }, headers)
+
+const postAs = (player, pin, score, stats = { wave: 6, kills: 40, combo: 5 }, game = "nova") =>
+	call("POST", `/g/${game}/score`, { player, pin, score, stats })
+
+describe("signing up", () => {
+	it("creates a player and lets them post straight away", async () => {
+		const r = await join("Zoe", "4242")
+		expect(r.status).toBe(200)
+		expect(await r.json()).toMatchObject({ ok: true, player: "zoe", created: true, kind: "open" })
+
+		expect((await postAs("zoe", "4242", 9000)).status).toBe(200)
+		expect((await top()).entries.map((e) => e.player)).toEqual(["zoe"])
+	})
+
+	it("signs an existing player back in rather than refusing them", async () => {
+		await join("zoe", "4242")
+		// Same call from a different device, or after clearing the browser.
+		const r = await join("ZOE", "4242")
+		expect(r.status).toBe(200)
+		expect(await r.json()).toMatchObject({ ok: true, player: "zoe", created: false })
+	})
+
+	it("refuses a name that is taken, without confirming it exists", async () => {
+		await join("zoe", "4242")
+		const r = await join("zoe", "1234")
+		expect(r.status).toBe(403)
+		// Same wording as claiming a kid's name — this must not be an oracle for
+		// who has an account.
+		const mine = await join("danylo", "9999")
+		expect((await r.json()).error).toBe((await mine.json()).error)
+	})
+
+	it("lets a kid sign in with their own PIN but never lets one be created", async () => {
+		expect(await (await join("danylo", PINS.danylo)).json()).toMatchObject({
+			ok: true,
+			player: "danylo",
+			created: false,
+			kind: "family",
+		})
+		// and nothing was written to the registry for them
+		expect((await (await admin("GET", "/admin/players")).json()).open).toEqual([])
+	})
+
+	it("rejects names that can't be one and PINs that can't be typed", async () => {
+		expect((await join("z", "4242")).status).toBe(400)
+		expect((await join("1234", "4242")).status).toBe(400)
+		expect((await join("guest", "4242")).status).toBe(400)
+		expect((await join("zoe", "12")).status).toBe(400)
+		expect((await join("zoe", "abcd")).status).toBe(400)
+	})
+
+	it("stops a PIN guesser without locking out the rest of the house", async () => {
+		for (let i = 0; i < 10; i++) await join("danylo", String(1000 + i))
+		expect((await join("danylo", "1111")).status).toBe(429)
+		// A different address is unaffected.
+		expect((await join("zoe", "4242", { "CF-Connecting-IP": "5.6.7.8" })).status).toBe(200)
+	})
+
+	it("stops taking signups once the arcade is full", async () => {
+		const index = { v: 1, players: [] }
+		for (let i = 0; i < 60; i++) index.players.push({ id: `kid${i}`, at: NOW })
+		env.SCORES.m.set("players:index", { value: JSON.stringify(index), expiresAt: null })
+		expect((await join("zoe", "4242")).status).toBe(409)
+	})
+})
+
+describe("an open player is a full player", () => {
+	beforeEach(async () => {
+		await join("zoe", "4242")
+	})
+
+	it("earns place points and appears on the joint board", async () => {
+		await postAs("zoe", "4242", 20000)
+		await post("danylo", 9000)
+
+		const d = await (await call("GET", "/joint")).json()
+		expect(d.standings[0]).toMatchObject({ player: "zoe", total: 11 })
+		expect(d.standings[1]).toMatchObject({ player: "danylo", total: 7 })
+	})
+
+	it("can win the whole week, and the payout proposal says so", async () => {
+		await postAs("zoe", "4242", 20000)
+		await post("danylo", 9000)
+		const d = await (await admin("POST", `/admin/close?week=${WEEK}&force=1`)).json()
+		expect(d.proposal.jointWinner).toBe("zoe")
+	})
+
+	it("cannot post as somebody else", async () => {
+		expect((await postAs("zoe", "1111", 9000)).status).toBe(403)
+		expect((await postAs("danylo", "4242", 9000)).status).toBe(403)
+	})
+
+	it("gets its own row rather than sharing one", async () => {
+		await join("mo", "5555")
+		await postAs("zoe", "4242", 9000)
+		await postAs("mo", "5555", 8000)
+		expect((await top()).entries.map((e) => e.player)).toEqual(["zoe", "mo"])
+	})
+})
+
+describe("removing a player", () => {
+	beforeEach(async () => {
+		await join("zoe", "4242")
+		await postAs("zoe", "4242", 20000)
+		await post("danylo", 9000)
+	})
+
+	it("takes their account and this week's scores with them", async () => {
+		const r = await admin("POST", "/admin/player/remove", { player: "zoe", week: WEEK })
+		expect(r.status).toBe(200)
+		expect(await r.json()).toMatchObject({ ok: true, player: "zoe", removed: true, cleared: { nova: 1 } })
+
+		expect((await top()).entries.map((e) => e.player)).toEqual(["danylo"])
+		expect((await (await admin("GET", "/admin/players")).json()).open).toEqual([])
+		// and the name is free again, which is the point of removing it
+		expect((await postAs("zoe", "4242", 9000)).status).toBe(403)
+	})
+
+	it("leaves the other games alone", async () => {
+		await postAs("zoe", "4242", 5, { landed: 3, heaviest: 4000, species: 2, flow: 15 }, "fish")
+		await admin("POST", "/admin/player/remove", { player: "zoe", week: WEEK })
+		expect((await top("fish")).entries).toEqual([])
+		expect((await top("city")).entries).toEqual([])
+	})
+
+	// History that can be edited is worth nothing to a kid disputing a payout.
+	it("refuses to touch a week that has been closed", async () => {
+		await admin("POST", `/admin/close?week=${WEEK}&force=1`)
+		const r = await admin("POST", "/admin/player/remove", { player: "zoe", week: WEEK })
+		expect(r.status).toBe(409)
+		const snap = await (await call("GET", `/week/${WEEK}`)).json()
+		expect(snap.standings[0].player).toBe("zoe")
+	})
+
+	it("will not pretend to remove a kid", async () => {
+		const r = await admin("POST", "/admin/player/remove", { player: "danylo", week: WEEK })
+		expect(r.status).toBe(400)
+		expect((await top()).entries.map((e) => e.player)).toContain("danylo")
+	})
+
+	it("needs the same auth and header as every other admin write", async () => {
+		expect((await call("POST", "/admin/player/remove", { player: "zoe" })).status).toBe(401)
+		const noHeader = await call("POST", "/admin/player/remove", { player: "zoe" }, {
+			Authorization: "Basic " + btoa("dad:hunter2"),
+		})
+		expect(noHeader.status).toBe(403)
+	})
+})
+
+describe("the dashboard tells family from visitors", () => {
+	it("marks a self-registered player in the standings", async () => {
+		await join("zoe", "4242")
+		await postAs("zoe", "4242", 20000)
+		await post("danylo", 9000)
+
+		const page = await (await admin("GET", "/admin")).text()
+		expect(page).toMatch(/zoe <span class="visitor">visitor<\/span>/)
+		expect(page).not.toMatch(/danylo <span class="visitor">/)
+		expect(page).toMatch(/1 of 60 self-signup slots used/)
+	})
+
+	// Removed from the registry, still on the board: the row must not quietly
+	// start reading as one of the kids.
+	it("still marks someone who has been removed but has scores", async () => {
+		await join("zoe", "4242")
+		await postAs("zoe", "4242", 20000)
+		env.SCORES.m.delete("player:zoe")
+		env.SCORES.m.set("players:index", { value: JSON.stringify({ v: 1, players: [] }), expiresAt: null })
+
+		expect(await (await admin("GET", "/admin")).text()).toMatch(/zoe <span class="visitor">/)
 	})
 })
