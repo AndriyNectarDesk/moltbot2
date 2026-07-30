@@ -25,6 +25,29 @@ export const CITY_HALF = (BLOCKS * BLOCK) / 2
 
 const NEON = [0xff3d8b, 0x36c8d8, 0xffc857, 0x8a5cff, 0x4ce0a0]
 
+/**
+ * The city is generated from a FIXED seed, so it is the same city every time.
+ *
+ * This matters more than it looks. Without it every reload rebuilt the whole map
+ * — buildings moved, and the stars you had already collected reappeared in
+ * streets you had never driven down, because only their indices were saved and
+ * not their positions. An open world you are asked to learn and to comb for
+ * collectables has to be the same place tomorrow.
+ *
+ * Change this number and you get a different city; keep it and everyone's saved
+ * progress keeps meaning what it meant.
+ */
+const CITY_SEED = 0x5ec7c1a7
+
+/** Small deterministic PRNG (LCG). Not good randomness, perfectly good layout. */
+function makeRng(seed) {
+	let s = seed >>> 0
+	return () => {
+		s = (s * 1664525 + 1013904223) >>> 0
+		return s / 4294967296
+	}
+}
+
 function makeCanvas(w, h = w) {
 	const c = document.createElement("canvas")
 	c.width = w
@@ -122,6 +145,14 @@ export class City {
 		/** Street corners, used as delivery pickups and drops. */
 		this.spots = []
 
+		// Everything that decides WHERE something is comes from here. The canvas
+		// textures still use Math.random, because a differently-speckled window
+		// pattern is not something anyone can navigate by.
+		const rnd = makeRng(CITY_SEED)
+		this._rnd = rnd
+		this._rand = (a = 1, b) => (b === undefined ? rnd() * a : a + rnd() * (b - a))
+		this._randInt = (a, b) => Math.floor(this._rand(a, b + 1))
+
 		this._facade = facadeTexture()
 		this._road = roadTexture()
 
@@ -165,21 +196,21 @@ export class City {
 				}
 
 				// One or two buildings per block, each with a single collider.
-				const split = Math.random() < 0.45
+				const split = this._rnd() < 0.45
 				const parts = split ? 2 : 1
 				for (let p = 0; p < parts; p++) {
-					const w = split ? inner * rand(0.38, 0.46) : inner * rand(0.62, 0.86)
-					const d = inner * rand(0.62, 0.86)
-					const offX = split ? (p === 0 ? -inner * 0.26 : inner * 0.26) : rand(-3, 3)
-					const offZ = rand(-3, 3)
-					const h = rand(10, 46) * (split ? 0.8 : 1)
+					const w = split ? inner * this._rand(0.38, 0.46) : inner * this._rand(0.62, 0.86)
+					const d = inner * this._rand(0.62, 0.86)
+					const offX = split ? (p === 0 ? -inner * 0.26 : inner * 0.26) : this._rand(-3, 3)
+					const offZ = this._rand(-3, 3)
+					const h = this._rand(10, 46) * (split ? 0.8 : 1)
 					this._building(c.x + offX, c.z + offZ, w, d, h)
 				}
 
 				// Corners of every block are useful, findable destinations.
 				this.spots.push({
-					x: c.x + (BLOCK / 2 - ROAD * 0.42) * (Math.random() < 0.5 ? 1 : -1),
-					z: c.z + (BLOCK / 2 - ROAD * 0.42) * (Math.random() < 0.5 ? 1 : -1),
+					x: c.x + (BLOCK / 2 - ROAD * 0.42) * (this._rnd() < 0.5 ? 1 : -1),
+					z: c.z + (BLOCK / 2 - ROAD * 0.42) * (this._rnd() < 0.5 ? 1 : -1),
 					label: `BLOCK ${String.fromCharCode(65 + i)}${j + 1}`,
 				})
 			}
@@ -193,7 +224,7 @@ export class City {
 		tex.repeat.set(Math.max(1, Math.round(w / 7)), Math.max(1, Math.round(h / 7)))
 		const mat = new THREE.MeshStandardMaterial({
 			map: tex,
-			color: new THREE.Color().setHSL(rand(0.58, 0.72), rand(0.15, 0.3), rand(0.16, 0.26)),
+			color: new THREE.Color().setHSL(this._rand(0.58, 0.72), this._rand(0.15, 0.3), this._rand(0.16, 0.26)),
 			roughness: 0.72,
 			metalness: 0.18,
 		})
@@ -205,9 +236,9 @@ export class City {
 
 		// A setback upper section on the taller ones, for a skyline rather than a
 		// row of identical slabs. Visual only — no extra collider.
-		if (h > 26 && Math.random() < 0.7) {
+		if (h > 26 && this._rnd() < 0.7) {
 			const top = new THREE.Mesh(
-				new THREE.BoxGeometry(w * 0.6, h * rand(0.2, 0.42), d * 0.6),
+				new THREE.BoxGeometry(w * 0.6, h * this._rand(0.2, 0.42), d * 0.6),
 				mat,
 			)
 			top.position.set(cx, h + top.geometry.parameters.height / 2, cz)
@@ -216,12 +247,12 @@ export class City {
 		}
 
 		// Neon band. This is what makes it read as the same world as the shooter.
-		const colour = NEON[randInt(0, NEON.length - 1)]
+		const colour = NEON[this._randInt(0, NEON.length - 1)]
 		const band = new THREE.Mesh(
 			new THREE.BoxGeometry(w * 1.01, 0.5, d * 1.01),
 			new THREE.MeshBasicMaterial({ color: colour }),
 		)
-		band.position.set(cx, rand(4, Math.max(5, h - 3)), cz)
+		band.position.set(cx, this._rand(4, Math.max(5, h - 3)), cz)
 		this.neonGroup.add(band)
 
 		// ONE collider for the whole thing.
@@ -337,15 +368,15 @@ export class City {
 			for (let j = 0; j < BLOCKS; j++) {
 				if ((i + j) % 2) continue
 				const c = blockCentre(i, j)
-				place(c.x + BLOCK / 2, c.z + rand(-BLOCK * 0.3, BLOCK * 0.3), 1.5)
+				place(c.x + BLOCK / 2, c.z + this._rand(-BLOCK * 0.3, BLOCK * 0.3), 1.5)
 			}
 		}
 		// Tucked into the alleys between split buildings.
 		for (let k = 0; k < 14; k++) {
-			const i = randInt(0, BLOCKS - 1)
-			const j = randInt(0, BLOCKS - 1)
+			const i = this._randInt(0, BLOCKS - 1)
+			const j = this._randInt(0, BLOCKS - 1)
 			const c = blockCentre(i, j)
-			place(c.x + rand(-4, 4), c.z + (BLOCK / 2 - ROAD * 0.5) * (Math.random() < 0.5 ? 1 : -1), 1.5)
+			place(c.x + this._rand(-4, 4), c.z + (BLOCK / 2 - ROAD * 0.5) * (this._rnd() < 0.5 ? 1 : -1), 1.5)
 		}
 		// In the air off the end of each ramp — these need a proper run-up.
 		for (const r of this.ramps) {

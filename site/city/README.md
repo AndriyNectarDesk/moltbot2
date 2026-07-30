@@ -69,15 +69,23 @@ Three cars, and they're genuinely different rather than three colours:
 | **HAULER** | 14 ★ | slow to turn, wide, and it *will not* drift no matter what you do. |
 | **COMET** | 34 ★ | fastest and tightest, with deliberately poor grip — it steps out on the throttle alone. |
 
-Measured, from `car.test.js`: top speeds 27 / 24 / 33, turning circles at 20 m/s
-of 11.7m / 17.1m / 8.3m, and 0–90% of top speed in 4.0s / 5.5s / 3.7s.
+Measured by simulating the model directly: top speeds 27 / 24 / 33, turning
+*radii* at 20 m/s of 11.7m / 17.1m / 8.3m, and 0–90% of top speed in
+4.0s / 5.5s / 3.7s. `car.test.js` asserts the relationships between those rather
+than the figures themselves — that the hauler turns widest, that the comet is
+quickest, that every car approaches but never exceeds its quoted top speed.
 
 ## Stars
 
 51 of them, hidden along the back streets, tucked down alleys between buildings,
 and strung in the air off the four ramps — those last ones need a proper run-up.
-Collecting them unlocks cars. They persist in `localStorage`, they're yours to
-keep, and they are **never** part of a score.
+Collecting them unlocks cars, and they persist in `localStorage`. They are never
+part of your *score* — free roam pays nothing — but the lifetime total is sent
+alongside a shift submission as a stat, so it does show up on the board.
+
+The city is generated from a fixed seed, so it is the same city every time. That
+is what makes the stars worth hunting: without it the map would be rebuilt on
+every load and a collected star would reappear somewhere you had never been.
 
 ## Scoring (SHIFT only)
 
@@ -85,9 +93,9 @@ Per delivery: a fee based on distance, plus up to 60% more for the clock you
 saved, plus 25% for arriving without hitting anything, all multiplied by your
 streak.
 
-The streak is +0.25× per clean delivery up to **3×**, and it resets if a parcel
-times out. Crashing costs you the clean bonus but **never** the parcel — losing a
-job to a wall you clipped would just be miserable.
+The streak is +0.25× per delivery up to **3×**, and only a timed-out parcel
+resets it. Crashing costs you that job's clean bonus but **never** the parcel or
+the streak — losing a job to a wall you clipped would just be miserable.
 
 `bestRun` on the board is your *quickest* single delivery.
 
@@ -121,9 +129,12 @@ a roof means solving elevated collision; a ramp needs only a height function and
 gravity. Two things to know: the ramps must sit on the **roads** at `BLOCK/2`
 offsets and not at block centres, because block centres are where the buildings
 are (the first version buried all four inside buildings, invisible and
-unreachable); and the launch multiplier in `main.js` is doing real work — these
-ramps are only 14°, so the honest vertical component is a 20cm hop, and the
-multiplier is what turns that into a jump worth aiming at.
+unreachable); and the launch multiplier in `main.js` is doing real work — the two
+short ramps rise 5m over 20m and the two long ones 6m over 22m, so all four are
+about 14°, and the honest vertical component at speed gives roughly a 70cm hop.
+The multiplier is what turns that into a jump worth aiming at. It is clamped,
+because `groundAt` is a step function at the ramp edges and an unclamped rate
+there reaches several hundred metres per second.
 
 **Copied rather than shared:** `fx.js` (byte-identical for the third time),
 `quality.js` (again, only `apply()` and the preset flags differ) and `audio.js`

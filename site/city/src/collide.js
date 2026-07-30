@@ -17,88 +17,88 @@
 
 /** An axis-aligned box in the XZ plane. Height is irrelevant — the car is on the ground. */
 export function box(cx, cz, sx, sz, extra = {}) {
-	return {
-		minX: cx - sx / 2,
-		maxX: cx + sx / 2,
-		minZ: cz - sz / 2,
-		maxZ: cz + sz / 2,
-		...extra,
-	}
+  return {
+    minX: cx - sx / 2,
+    maxX: cx + sx / 2,
+    minZ: cz - sz / 2,
+    maxZ: cz + sz / 2,
+    ...extra,
+  };
 }
 
 export class Grid {
-	constructor(cellSize = 24) {
-		this.cellSize = cellSize
-		this.cells = new Map()
-		this.boxes = []
-		// Visit stamp instead of a Set, so a query allocates nothing.
-		this._stamp = 0
-		this._out = []
-	}
+  constructor(cellSize = 24) {
+    this.cellSize = cellSize;
+    this.cells = new Map();
+    this.boxes = [];
+    // Visit stamp instead of a Set, so a query allocates nothing.
+    this._stamp = 0;
+    this._out = [];
+  }
 
-	_key(cx, cz) {
-		return cx * 73856093 ^ (cz * 19349663)
-	}
+  _key(cx, cz) {
+    return (cx * 73856093) ^ (cz * 19349663);
+  }
 
-	insert(b) {
-		this.boxes.push(b)
-		const cs = this.cellSize
-		const x0 = Math.floor(b.minX / cs)
-		const x1 = Math.floor(b.maxX / cs)
-		const z0 = Math.floor(b.minZ / cs)
-		const z1 = Math.floor(b.maxZ / cs)
-		for (let cx = x0; cx <= x1; cx++) {
-			for (let cz = z0; cz <= z1; cz++) {
-				const k = this._key(cx, cz)
-				let list = this.cells.get(k)
-				if (!list) {
-					list = []
-					this.cells.set(k, list)
-				}
-				list.push(b)
-			}
-		}
-		return b
-	}
+  insert(b) {
+    this.boxes.push(b);
+    const cs = this.cellSize;
+    const x0 = Math.floor(b.minX / cs);
+    const x1 = Math.floor(b.maxX / cs);
+    const z0 = Math.floor(b.minZ / cs);
+    const z1 = Math.floor(b.maxZ / cs);
+    for (let cx = x0; cx <= x1; cx++) {
+      for (let cz = z0; cz <= z1; cz++) {
+        const k = this._key(cx, cz);
+        let list = this.cells.get(k);
+        if (!list) {
+          list = [];
+          this.cells.set(k, list);
+        }
+        list.push(b);
+      }
+    }
+    return b;
+  }
 
-	clear() {
-		this.cells.clear()
-		this.boxes.length = 0
-	}
+  clear() {
+    this.cells.clear();
+    this.boxes.length = 0;
+  }
 
-	/**
-	 * Every box whose cell overlaps the given rectangle, each exactly once.
-	 *
-	 * Returns a reused array — copy it if you need to keep it.
-	 */
-	query(minX, minZ, maxX, maxZ) {
-		const out = this._out
-		out.length = 0
-		const stamp = ++this._stamp
-		const cs = this.cellSize
-		const x0 = Math.floor(minX / cs)
-		const x1 = Math.floor(maxX / cs)
-		const z0 = Math.floor(minZ / cs)
-		const z1 = Math.floor(maxZ / cs)
-		for (let cx = x0; cx <= x1; cx++) {
-			for (let cz = z0; cz <= z1; cz++) {
-				const list = this.cells.get(this._key(cx, cz))
-				if (!list) continue
-				for (let i = 0; i < list.length; i++) {
-					const b = list[i]
-					if (b._stamp !== stamp) {
-						b._stamp = stamp
-						out.push(b)
-					}
-				}
-			}
-		}
-		return out
-	}
+  /**
+   * Every box whose cell overlaps the given rectangle, each exactly once.
+   *
+   * Returns a reused array — copy it if you need to keep it.
+   */
+  query(minX, minZ, maxX, maxZ) {
+    const out = this._out;
+    out.length = 0;
+    const stamp = ++this._stamp;
+    const cs = this.cellSize;
+    const x0 = Math.floor(minX / cs);
+    const x1 = Math.floor(maxX / cs);
+    const z0 = Math.floor(minZ / cs);
+    const z1 = Math.floor(maxZ / cs);
+    for (let cx = x0; cx <= x1; cx++) {
+      for (let cz = z0; cz <= z1; cz++) {
+        const list = this.cells.get(this._key(cx, cz));
+        if (!list) continue;
+        for (let i = 0; i < list.length; i++) {
+          const b = list[i];
+          if (b._stamp !== stamp) {
+            b._stamp = stamp;
+            out.push(b);
+          }
+        }
+      }
+    }
+    return out;
+  }
 
-	queryCircle(x, z, r) {
-		return this.query(x - r, z - r, x + r, z + r)
-	}
+  queryCircle(x, z, r) {
+    return this.query(x - r, z - r, x + r, z + r);
+  }
 }
 
 /**
@@ -111,67 +111,103 @@ export class Grid {
  * Mutates and returns `result` so the caller can keep it as a scratch object.
  */
 export function resolveCircle(grid, x, z, r, result = {}) {
-	result.x = x
-	result.z = z
-	result.nx = 0
-	result.nz = 0
-	result.hit = false
-	result.depth = 0
+  result.x = x;
+  result.z = z;
+  result.nx = 0;
+  result.nz = 0;
+  result.hit = false;
+  result.depth = 0;
+  // Deepest single contact, kept as a fallback for the symmetric case below.
+  let deepest = -1;
+  let deepX = 0;
+  let deepZ = 0;
+  const note = (nx, nz, push) => {
+    if (push > deepest) {
+      deepest = push;
+      deepX = nx;
+      deepZ = nz;
+    }
+  };
 
-	const candidates = grid.queryCircle(x, z, r)
-	for (let i = 0; i < candidates.length; i++) {
-		const b = candidates[i]
-		// Closest point on the box to the circle centre.
-		const cx = result.x < b.minX ? b.minX : result.x > b.maxX ? b.maxX : result.x
-		const cz = result.z < b.minZ ? b.minZ : result.z > b.maxZ ? b.maxZ : result.z
-		const dx = result.x - cx
-		const dz = result.z - cz
-		const d2 = dx * dx + dz * dz
+  // Resolved over a few passes rather than one. Pushing the circle out of one
+  // box can push it into its neighbour, so a single sweep can finish with the
+  // centre inside a building — which for the car means being parked inside a
+  // wall with no way out. Three passes settles every arrangement the city
+  // actually contains, and re-querying is cheap because the position has moved.
+  for (let pass = 0; pass < 3; pass++) {
+    let moved = false;
+    const candidates = grid.queryCircle(result.x, result.z, r);
+    for (let i = 0; i < candidates.length; i++) {
+      const b = candidates[i];
+      // Closest point on the box to the circle centre.
+      const cx =
+        result.x < b.minX ? b.minX : result.x > b.maxX ? b.maxX : result.x;
+      const cz =
+        result.z < b.minZ ? b.minZ : result.z > b.maxZ ? b.maxZ : result.z;
+      const dx = result.x - cx;
+      const dz = result.z - cz;
+      const d2 = dx * dx + dz * dz;
 
-		if (d2 > r * r) continue
+      if (d2 > r * r) continue;
 
-		if (d2 > 1e-9) {
-			// Outside the box, overlapping the edge or corner.
-			const d = Math.sqrt(d2)
-			const push = r - d
-			const nx = dx / d
-			const nz = dz / d
-			result.x += nx * push
-			result.z += nz * push
-			result.nx += nx
-			result.nz += nz
-			result.depth = Math.max(result.depth, push)
-		} else {
-			// Centre is inside the box — pick the nearest face and leave by it.
-			const left = result.x - b.minX
-			const right = b.maxX - result.x
-			const back = result.z - b.minZ
-			const front = b.maxZ - result.z
-			const min = Math.min(left, right, back, front)
-			if (min === left) {
-				result.x = b.minX - r
-				result.nx -= 1
-			} else if (min === right) {
-				result.x = b.maxX + r
-				result.nx += 1
-			} else if (min === back) {
-				result.z = b.minZ - r
-				result.nz -= 1
-			} else {
-				result.z = b.maxZ + r
-				result.nz += 1
-			}
-			result.depth = Math.max(result.depth, min + r)
-		}
-		result.hit = true
-	}
+      if (d2 > 1e-9) {
+        // Outside the box, overlapping the edge or corner.
+        const d = Math.sqrt(d2);
+        const push = r - d;
+        const nx = dx / d;
+        const nz = dz / d;
+        result.x += nx * push;
+        result.z += nz * push;
+        result.nx += nx;
+        result.nz += nz;
+        note(nx, nz, push);
+        result.depth = Math.max(result.depth, push);
+      } else {
+        // Centre is inside the box — pick the nearest face and leave by it.
+        const left = result.x - b.minX;
+        const right = b.maxX - result.x;
+        const back = result.z - b.minZ;
+        const front = b.maxZ - result.z;
+        const min = Math.min(left, right, back, front);
+        if (min === left) {
+          result.x = b.minX - r;
+          result.nx -= 1;
+          note(-1, 0, min + r);
+        } else if (min === right) {
+          result.x = b.maxX + r;
+          result.nx += 1;
+          note(1, 0, min + r);
+        } else if (min === back) {
+          result.z = b.minZ - r;
+          result.nz -= 1;
+          note(0, -1, min + r);
+        } else {
+          result.z = b.maxZ + r;
+          result.nz += 1;
+          note(0, 1, min + r);
+        }
+        result.depth = Math.max(result.depth, min + r);
+      }
+      result.hit = true;
+      moved = true;
+    }
+    if (!moved) break;
+  }
 
-	if (result.hit) {
-		const len = Math.hypot(result.nx, result.nz)
-		if (len > 1e-9) {
-			result.nx /= len
-			result.nz /= len
-		}
-	}
-	return result
+  if (result.hit) {
+    const len = Math.hypot(result.nx, result.nz);
+    if (len > 1e-9) {
+      result.nx /= len;
+      result.nz /= len;
+    } else {
+      // Squeezed symmetrically — two opposing walls cancelled each other out.
+      // Leaving the normal at zero meant `bounce` did nothing at all: no
+      // impact, no sound, and no crash recorded, so the car slid straight
+      // through gaps narrower than itself and kept its clean-driving bonus
+      // while doing it. Fall back to the deepest single contact.
+      result.nx = deepX;
+      result.nz = deepZ;
+    }
+  }
+  return result;
 }

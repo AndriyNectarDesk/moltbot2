@@ -185,7 +185,13 @@ export class Car {
 		const highSpeedEase = lerp(1, 0.55, clamp(Math.abs(entrySpeed) / s.maxSpeed, 0, 1))
 		// Reversing steers the other way, as it does in a real car park.
 		const dir = entrySpeed < -0.2 ? -1 : 1
-		this.yawRate = steer * s.turn * speedRamp * highSpeedEase * dir
+		// Note the leading minus. `forward` is (-sin h, -cos h), so INCREASING the
+		// heading rotates the car toward its own left — which means a positive
+		// steer input has to produce a negative yaw rate for "right" to mean right.
+		// Without it the whole game steers backwards, and nothing else catches it
+		// because the wheels, the body roll and the mesh are all coherently
+		// left-positive too. See the absolute-direction test in car.test.js.
+		this.yawRate = -steer * s.turn * speedRamp * highSpeedEase * dir
 		this.heading += this.yawRate * dt
 		this.steerShown = lerp(this.steerShown, steer, 1 - Math.pow(0.001, dt))
 

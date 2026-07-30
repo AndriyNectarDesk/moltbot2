@@ -71,9 +71,11 @@ export const GAMES = {
 			// Seconds for the quickest single delivery. Can't exceed the shift.
 			bestRun: { min: 0, max: 300 },
 		},
-		// `bestRun` is deliberately absent: it's a minimum-type stat, so sitting at
-		// its ceiling is a slow delivery rather than a suspicious one.
-		suspiciousMax: ["deliveries", "stars"],
+		// Only `deliveries` — 200 in a five-minute shift is absurd. `bestRun` is a
+		// minimum-type stat, so sitting at its ceiling is a slow delivery rather
+		// than a suspicious one, and `stars` is a collection the game is actively
+		// asking you to complete, so flagging a full set would punish finishing it.
+		suspiciousMax: ["deliveries"],
 		// Measured: a simulated beeline driver at 22 m/s banks ~29k over a
 		// five-minute shift and one at 31 m/s ~55k, and a real player navigating
 		// actual streets will be well under that. The single richest possible

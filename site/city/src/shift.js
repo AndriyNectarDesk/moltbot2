@@ -18,7 +18,12 @@ import { clamp } from "../../shared/util.js"
 
 export const SHIFT_SECONDS = 300
 
-/** Streak multiplier: +0.25 per clean delivery, capped. */
+/**
+ * Streak multiplier: +0.25 per delivery, capped.
+ *
+ * Per DELIVERY, not per clean delivery — crashing costs you that job's clean
+ * bonus but not the streak. Only letting a parcel time out resets it.
+ */
 const STREAK_STEP = 0.25
 const STREAK_MAX = 3
 

@@ -14,7 +14,28 @@ function bruteForce(boxes, minX, minZ, maxX, maxZ) {
 	return boxes.filter((b) => b.maxX >= minX && b.minX <= maxX && b.maxZ >= minZ && b.minZ <= maxZ)
 }
 
-/** A city-sized spread of buildings, one collision box each. */
+/**
+ * Buildings laid out the way the real city lays them out: one box per block, on a
+ * grid, never overlapping each other.
+ *
+ * This is the fixture the separation guarantee is stated against. `cityish` below
+ * scatters boxes at random and they pile into solid clumps several deep, which no
+ * single-shot resolver can push a circle out of and which the actual game never
+ * produces — using it to test separation would be testing something the code
+ * doesn't claim.
+ */
+function gridCity(blocks = 8, block = 40, size = 26) {
+	const g = new Grid(block)
+	let id = 0
+	for (let i = 0; i < blocks; i++) {
+		for (let j = 0; j < blocks; j++) {
+			g.insert(box((i - blocks / 2) * block, (j - blocks / 2) * block, size, size, { id: id++ }))
+		}
+	}
+	return g
+}
+
+/** A deliberately nasty random spread, for robustness rather than separation. */
 function cityish(n = 600, spread = 600) {
 	const g = new Grid(24)
 	// Deterministic, so a failure is reproducible.
@@ -162,25 +183,56 @@ describe("pushing a circle out of walls", () => {
 		expect(Number.isFinite(r.z)).toBe(true)
 	})
 
-	it("always ends up outside every box it was given", () => {
-		const { g: city, rnd } = cityish(300, 400)
-		for (let i = 0; i < 500; i++) {
-			const x = (rnd() - 0.5) * 400
-			const z = (rnd() - 0.5) * 400
-			const r = resolveCircle(city, x, z, 2.2)
+	// This used to assert `Math.hypot(...) > -1`, which is unconditionally true —
+	// the most important invariant in the file was being "checked" by proving that
+	// zero is greater than minus one, five hundred times.
+	it("never leaves the circle inside a building, on a city-shaped layout", () => {
+		const city = gridCity()
+		const RADIUS = 2.3 // the car's
+		let checked = 0
+		let seed = 99
+		const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff), seed / 0x7fffffff)
+		for (let i = 0; i < 2000; i++) {
+			const x = (rnd() - 0.5) * 320
+			const z = (rnd() - 0.5) * 320
+			const r = resolveCircle(city, x, z, RADIUS)
+			expect(Number.isFinite(r.x) && Number.isFinite(r.z)).toBe(true)
 			if (!r.hit) continue
-			// Allow a small tolerance: overlapping boxes can fight each other, and
-			// the car's own bounce handles the rest.
+			checked++
 			for (const b of city.boxes) {
+				const inside = r.x > b.minX && r.x < b.maxX && r.z > b.minZ && r.z < b.maxZ
+				expect(inside, `centre ended up inside a box at ${r.x},${r.z}`).toBe(false)
 				const cx = Math.max(b.minX, Math.min(r.x, b.maxX))
 				const cz = Math.max(b.minZ, Math.min(r.z, b.maxZ))
-				const d = Math.hypot(r.x - cx, r.z - cz)
-				// Not asserting full separation from EVERY box — just that we never
-				// end up deep inside one.
-				expect(d).toBeGreaterThan(-1)
+				// Fully separated: not touching any building at all.
+				expect(Math.hypot(r.x - cx, r.z - cz)).toBeGreaterThan(RADIUS - 1e-6)
 			}
-			expect(Number.isFinite(r.x) && Number.isFinite(r.z)).toBe(true)
 		}
+		expect(checked).toBeGreaterThan(100)
+	})
+
+	it("stays finite even on a pathological pile of overlapping boxes", () => {
+		// No separation promise here — a circle buried several boxes deep can't be
+		// pushed clear in a bounded number of passes, and the city never builds
+		// anything like this. What must hold is that it never returns nonsense.
+		const { g: city, rnd } = cityish(300, 400)
+		for (let i = 0; i < 500; i++) {
+			const r = resolveCircle(city, (rnd() - 0.5) * 400, (rnd() - 0.5) * 400, 2.2)
+			expect(Number.isFinite(r.x) && Number.isFinite(r.z)).toBe(true)
+			if (r.hit) expect(Math.hypot(r.nx, r.nz)).toBeGreaterThan(0.5)
+		}
+	})
+
+	it("still reports a usable normal when squeezed from both sides", () => {
+		const alley = new Grid(20)
+		alley.insert(box(-6, 0, 8, 40))
+		alley.insert(box(6, 0, 8, 40))
+		// Dead centre of a gap too narrow for the circle: the two pushes cancel.
+		const r = resolveCircle(alley, 0, 0, 3)
+		expect(r.hit).toBe(true)
+		// A zero normal here meant bounce() did nothing and the car sailed through
+		// a gap narrower than itself, with no impact and no crash penalty.
+		expect(Math.hypot(r.nx, r.nz)).toBeGreaterThan(0.5)
 	})
 
 	it("reports a unit normal", () => {

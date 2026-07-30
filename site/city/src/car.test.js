@@ -110,6 +110,45 @@ describe("it goes and it stops", () => {
 	})
 })
 
+// The whole original suite measured turning with Math.abs() and only ever
+// compared signs against each other, so a completely inverted control scheme
+// passed every test. These pin the absolute direction to the world.
+describe("right means right", () => {
+	it("goes right when steered right", () => {
+		const car = upToSpeed(new Car("scout"))
+		// heading 0 faces -Z, so the car's right hand is +X.
+		drive(car, 2, { throttle: 1, steer: 1 })
+		expect(car.x, "steer:+1 must move the car towards +X").toBeGreaterThan(2)
+	})
+
+	it("goes left when steered left", () => {
+		const car = upToSpeed(new Car("scout"))
+		drive(car, 2, { throttle: 1, steer: -1 })
+		expect(car.x).toBeLessThan(-2)
+	})
+
+	it("swings the nose the other way in reverse", () => {
+		const car = new Car("scout")
+		drive(car, 3, { throttle: -1 })
+		const noseBefore = car.heading
+		drive(car, 2, { throttle: -1, steer: 1 })
+		// Backing up with the wheel right: the nose swings LEFT (heading increases,
+		// because increasing heading rotates the car towards its own left) while the
+		// REAR tracks right, so the car body ends up towards +X. That is what a real
+		// car does, and it's why the two directions have to be checked separately.
+		expect(car.heading).toBeGreaterThan(noseBefore)
+		expect(car.x).toBeGreaterThan(0)
+	})
+
+	it("rolls the body into the corner, not out of it", () => {
+		const car = upToSpeed(new Car("scout"))
+		drive(car, 1.2, { throttle: 1, steer: 1 })
+		// Turning right, the body leans left — positive rotation about Z tips the
+		// roof towards -X, which is what the renderer applies.
+		expect(car.lean).toBeGreaterThan(0)
+	})
+})
+
 describe("steering has weight", () => {
 	it("cannot spin on the spot", () => {
 		const car = new Car("scout")

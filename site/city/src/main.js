@@ -234,6 +234,7 @@ class Game {
 		$("btn-shift-now").onclick = () => this.startShift()
 		$("btn-again").onclick = () => this.startShift()
 		$("btn-roam-after").onclick = () => this.startRoam()
+		$("btn-menu-after").onclick = () => this.toMenu()
 
 		const pauseBtn = $("btn-pause")
 		if (pauseBtn) pauseBtn.onclick = () => (this.state === "paused" ? this.resume() : this.pause())
@@ -441,6 +442,7 @@ class Game {
 		this._screens(null)
 		this.hud.show(true)
 		this.hud.reset()
+		this.hud.setStars(this.city.starsTaken, this.city.stars.length)
 		this.hud.setMode("FREE ROAM", false)
 		this.audio.startMusic()
 		this.hud.toast("NO CLOCK, NO RULES — GO AND HAVE A LOOK", "good")
@@ -458,6 +460,7 @@ class Game {
 		this._screens(null)
 		this.hud.show(true)
 		this.hud.reset()
+		this.hud.setStars(this.city.starsTaken, this.city.stars.length)
 		this.hud.setMode("SHIFT", true)
 		this.audio.startMusic()
 		this.hud.toast("FIVE MINUTES — GO", "good")
@@ -476,6 +479,9 @@ class Game {
 		if (this.state !== "paused") return
 		this.state = this._wasState
 		this._screens(null)
+		// A long pause can leave the context suspended, and the radio would just
+		// never come back.
+		this.audio.resume()
 		this.audio.startMusic()
 	}
 
@@ -546,7 +552,13 @@ class Game {
 	}
 
 	_driveCar(dt) {
-		const control = this.state === "paused" ? {} : this._readInput()
+		// Fully specified rather than `{}`: `control.steer` would be undefined, and
+		// the airborne branch below multiplies it, so one frame of that would put a
+		// NaN into the heading and never come back. (This branch is unreachable
+		// today — _driveCar only runs while driving — which is exactly why it would
+		// be a nasty surprise later.)
+		const control =
+			this.state === "paused" ? { throttle: 0, steer: 0, handbrake: false } : this._readInput()
 		const airborne = this.car.y > this.city.groundAt(this.car.x, this.car.z) + 0.12
 
 		// No grip in the air, so a jump keeps its momentum instead of being
@@ -586,7 +598,13 @@ class Game {
 			if (this._prevGround > 0.6 && ground < this._prevGround - 0.05 && this.car.speed > 9) {
 				this.car.vy = Math.max(0, this._rampVy)
 			}
-			this._rampVy = Math.max(0, rate * 2.2)
+			// Clamped, because `groundAt` is a step function: the wedge has vertical
+			// faces at its lip and down both sides, so crossing one of those edges
+			// makes `rate` the full ramp height divided by one frame — measured at
+			// 788 m/s. Nothing but the climb limiter below was stopping that from
+			// reaching `vy`, and a launch can never legitimately exceed the car's own
+			// speed anyway.
+			this._rampVy = clamp(rate * 2.2, 0, Math.min(15, this.car.speed * 0.7))
 		}
 		this._prevGround = ground
 
@@ -627,7 +645,9 @@ class Game {
 			for (const w of this.carMesh.userData.spin) w.rotation.x = c.wheelSpin
 		}
 		if (this.carMesh.userData.steerWheels) {
-			for (const w of this.carMesh.userData.steerWheels) w.rotation.y = c.steerShown * 0.5
+			// Negated for the same reason as the yaw rate: +Y rotation points the
+			// wheels left, and a positive steer input means right.
+			for (const w of this.carMesh.userData.steerWheels) w.rotation.y = -c.steerShown * 0.5
 		}
 		// Tyre smoke while sliding.
 		if (c.drifting && !c.airborne && Math.random() < 0.6) {
@@ -680,9 +700,14 @@ class Game {
 		const dx = t.x - this.car.x
 		const dz = t.z - this.car.z
 		const dist = Math.hypot(dx, dz)
-		// Bearing of the target minus the car's heading.
+		// `bearing` is a compass angle — clockwise-positive from -Z, which is what a
+		// CSS rotate() wants. `heading` is an ordinary maths angle, so it runs the
+		// other way: the car's own compass bearing is -heading. The relative angle
+		// is therefore bearing - (-heading), and getting that sign wrong put the
+		// arrow out by twice the heading — correct only when driving due north or
+		// due south, which is exactly often enough to look like it works.
 		const bearing = Math.atan2(dx, -dz)
-		let rel = bearing - this.car.heading
+		let rel = bearing + this.car.heading
 		while (rel > Math.PI) rel -= Math.PI * 2
 		while (rel < -Math.PI) rel += Math.PI * 2
 		return { rel, dist, kind: job.carrying ? "drop" : "pickup" }
@@ -697,8 +722,16 @@ class Game {
 
 		const driving = this.state === "roam" || this.state === "shift"
 
+		// Polled outside the driving branch: endFrame() clears the edge every frame,
+		// so an Escape pressed while paused was being consumed and thrown away —
+		// leaving a keyboard-only game whose pause menu could only be left with a
+		// mouse.
+		if (this.input.once("Escape")) {
+			if (driving) this.pause()
+			else if (this.state === "paused") this.resume()
+		}
+
 		if (driving) {
-			if (this.input.once("Escape")) this.pause()
 			if (this.input.once("KeyR")) this._nextStation()
 			if (this.input.once("Enter") && this.state === "roam") this.startShift()
 
