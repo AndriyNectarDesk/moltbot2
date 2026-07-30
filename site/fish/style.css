@@ -1,0 +1,610 @@
+/* ============================================================
+   MIKE: QUIET WATER — dawn palette + the fishing HUD
+   ============================================================
+
+   The whole retheme from the shooter is the :root block below. base.css carries
+   the screens, buttons, option rows and score table, and every one of them is
+   drawn from these seven variables — so swapping neon orange for pale gold and
+   neon cyan for sage moves the entire chrome without touching a single rule.
+   That was the point of extracting base.css, and it is worth not undoing. */
+
+:root {
+	/* pale gold where the shooter has hot orange */
+	--orange: #d09a3f;
+	--orange-hot: #f0cd86;
+	/* sage-aqua where it has neon cyan */
+	--cyan: #7ecfc0;
+	--cyan-dim: #3d7a72;
+	/* dawn blue where it has magenta, and a deeper blue for violet */
+	--magenta: #6f9ad1;
+	--violet: #47709f;
+	--ink: #081319;
+	--hud-font: "Rajdhani", "Eurostile", "Bahnschrift", "DIN Alternate", "Segoe UI", system-ui, sans-serif;
+
+	--danger: #e0703f;
+	--calm: #9fd8c6;
+}
+
+body {
+	background: #0c1a22;
+}
+
+/* Screens get water rather than a purple nebula. */
+.screen {
+	background:
+		radial-gradient(ellipse at 50% 20%, rgba(120, 160, 175, 0.35), transparent 62%),
+		linear-gradient(180deg, rgba(8, 20, 26, 0.9), rgba(8, 20, 26, 0.97));
+}
+
+/* The title is a place, not a hero — quieter than the shooter's. */
+.t-title span {
+	background: linear-gradient(180deg, #fff 25%, var(--orange) 96%);
+	filter: drop-shadow(0 5px 26px rgba(208, 154, 63, 0.45));
+	letter-spacing: 14px;
+}
+
+.t-title em {
+	text-shadow: 0 0 22px rgba(126, 207, 192, 0.6);
+}
+
+/* how-to-play block on the title screen */
+.how {
+	max-width: 560px;
+	margin: 26px auto 0;
+	text-align: left;
+	display: grid;
+	gap: 10px;
+}
+
+.how-row {
+	font-size: 12.5px;
+	line-height: 1.6;
+	letter-spacing: 0.6px;
+	color: rgba(255, 255, 255, 0.55);
+	padding-left: 12px;
+	border-left: 2px solid rgba(126, 207, 192, 0.3);
+}
+
+.how-row b {
+	color: var(--cyan);
+	letter-spacing: 1.5px;
+}
+
+/* ============================ HUD ============================ */
+#hud {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	z-index: 10;
+}
+
+#top-bar {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	display: flex;
+	align-items: flex-start;
+	gap: 22px;
+	padding: 14px 16px;
+	background: linear-gradient(180deg, rgba(6, 16, 22, 0.72), transparent);
+}
+
+#top-bar .cap {
+	display: block;
+	font-size: 9px;
+	letter-spacing: 3px;
+	color: rgba(255, 255, 255, 0.38);
+	margin-top: 1px;
+}
+
+#clock-box,
+#score-box,
+#flow-wrap {
+	font-variant-numeric: tabular-nums;
+}
+
+#clock {
+	font-size: 30px;
+	font-weight: 700;
+	letter-spacing: 2px;
+	color: #fff;
+	text-shadow: 0 0 18px rgba(126, 207, 192, 0.4);
+}
+
+#clock.low {
+	color: var(--orange-hot);
+	text-shadow: 0 0 20px rgba(240, 205, 134, 0.6);
+}
+
+#score {
+	font-size: 26px;
+	font-weight: 700;
+	letter-spacing: 1px;
+	color: var(--orange-hot);
+}
+
+#flow-wrap {
+	margin-left: auto;
+	text-align: right;
+}
+
+#flow {
+	font-size: 21px;
+	font-weight: 700;
+	letter-spacing: 1px;
+	color: rgba(255, 255, 255, 0.6);
+	transition: color 0.2s, text-shadow 0.2s;
+}
+
+#flow-wrap.hot #flow {
+	color: var(--calm);
+	text-shadow: 0 0 16px rgba(159, 216, 198, 0.6);
+}
+
+#flow-wrap.max #flow {
+	color: var(--orange-hot);
+	text-shadow: 0 0 22px rgba(240, 205, 134, 0.8);
+}
+
+#btn-pause {
+	pointer-events: auto;
+	font-size: 13px;
+	letter-spacing: 1px;
+	padding: 7px 12px;
+	margin: 0;
+	background: rgba(10, 24, 30, 0.7);
+	color: rgba(255, 255, 255, 0.7);
+	border: 1px solid rgba(255, 255, 255, 0.18);
+	box-shadow: none;
+	border-radius: 4px;
+}
+
+#btn-pause:hover {
+	transform: none;
+	filter: none;
+	box-shadow: none;
+	border-color: var(--cyan);
+}
+
+/* species tally — one pip per species, so the collection goal is always visible */
+#tally {
+	position: absolute;
+	top: 74px;
+	left: 16px;
+	display: flex;
+	gap: 5px;
+}
+
+.pip {
+	width: 32px;
+	padding: 3px 0 2px;
+	text-align: center;
+	border-radius: 3px;
+	background: rgba(10, 24, 30, 0.55);
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	opacity: 0.5;
+}
+
+.pip.got {
+	opacity: 1;
+	border-color: rgba(126, 207, 192, 0.5);
+	background: rgba(30, 66, 66, 0.65);
+}
+
+.pip .pn {
+	display: block;
+	font-size: 9px;
+	letter-spacing: 1px;
+	color: rgba(255, 255, 255, 0.55);
+}
+
+.pip.got .pn {
+	color: var(--cyan);
+}
+
+.pip .pc {
+	display: block;
+	font-size: 11px;
+	font-weight: 700;
+	color: #fff;
+	min-height: 13px;
+}
+
+/* the water under the reticle */
+#spot {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, 42px);
+	font-size: 10px;
+	letter-spacing: 5px;
+	color: rgba(255, 255, 255, 0.55);
+	text-shadow: 0 1px 8px rgba(0, 0, 0, 0.7);
+}
+
+/* cast power */
+#power {
+	position: absolute;
+	bottom: 96px;
+	left: 50%;
+	transform: translateX(-50%);
+	width: 190px;
+	height: 7px;
+	border-radius: 4px;
+	background: rgba(8, 20, 26, 0.7);
+	border: 1px solid rgba(255, 255, 255, 0.18);
+	overflow: hidden;
+}
+
+#power-fill {
+	height: 100%;
+	width: 0;
+	background: linear-gradient(90deg, var(--cyan), var(--orange-hot));
+	transition: width 0.04s linear;
+}
+
+#power::after {
+	content: attr(data-reach);
+	position: absolute;
+	top: 11px;
+	left: 50%;
+	transform: translateX(-50%);
+	font-size: 10px;
+	letter-spacing: 3px;
+	color: rgba(255, 255, 255, 0.5);
+}
+
+/* ============================ THE FIGHT ============================ */
+#fighting {
+	position: absolute;
+	bottom: 74px;
+	left: 50%;
+	transform: translateX(-50%);
+	width: min(360px, 78vw);
+	text-align: center;
+}
+
+#fight-name {
+	font-size: 13px;
+	font-weight: 700;
+	letter-spacing: 6px;
+	color: var(--orange-hot);
+	margin-bottom: 7px;
+	text-shadow: 0 0 16px rgba(240, 205, 134, 0.5);
+}
+
+#tension {
+	position: relative;
+	height: 15px;
+	border-radius: 4px;
+	background: rgba(8, 20, 26, 0.8);
+	border: 1px solid rgba(255, 255, 255, 0.22);
+	overflow: hidden;
+}
+
+#tension-fill {
+	height: 100%;
+	width: 0;
+	/* Green through amber to red, so the bar itself tells you where you are
+	   without needing to read a number. */
+	background: linear-gradient(90deg, #6fc2a4 0%, #a9c777 52%, #e0b455 74%, var(--danger) 100%);
+	transition: width 0.05s linear;
+}
+
+/* the line that matters — where it starts getting dangerous */
+#tension-mark {
+	position: absolute;
+	top: -1px;
+	bottom: -1px;
+	left: 80%;
+	width: 2px;
+	background: rgba(255, 255, 255, 0.55);
+}
+
+#tension.danger {
+	animation: pulse 0.36s ease-in-out infinite alternate;
+	border-color: var(--danger);
+}
+
+/* The telegraph. This is the single most important thing on the screen during a
+   fight — seeing it and letting go is what lets you hold a high, fast-reeling
+   tension the rest of the time — so it gets a hard, obvious treatment rather
+   than a tasteful one. */
+#tension.warn {
+	border-color: var(--orange-hot);
+	box-shadow: 0 0 26px rgba(240, 205, 134, 0.9);
+}
+
+#tension.warn::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	background: rgba(240, 205, 134, 0.35);
+	animation: braceFlash 0.16s steps(1) infinite alternate;
+}
+
+@keyframes braceFlash {
+	from {
+		opacity: 0.15;
+	}
+	to {
+		opacity: 0.9;
+	}
+}
+
+#fighting.bracing #fight-name::after {
+	content: " — LET GO";
+	color: var(--orange-hot);
+}
+
+#fighting.bracing {
+	animation: braceShake 0.09s linear infinite alternate;
+}
+
+@keyframes braceShake {
+	from {
+		transform: translateX(-50%) translateY(0);
+	}
+	to {
+		transform: translateX(-50%) translateY(-2px);
+	}
+}
+
+@keyframes pulse {
+	from {
+		box-shadow: 0 0 0 rgba(224, 112, 63, 0);
+	}
+	to {
+		box-shadow: 0 0 22px rgba(224, 112, 63, 0.85);
+	}
+}
+
+#line-bar {
+	margin-top: 9px;
+	height: 8px;
+	border-radius: 4px;
+	background: rgba(8, 20, 26, 0.8);
+	border: 1px solid rgba(255, 255, 255, 0.18);
+	overflow: hidden;
+}
+
+#line-fill {
+	height: 100%;
+	width: 0;
+	background: linear-gradient(90deg, var(--cyan-dim), var(--cyan));
+	transition: width 0.08s linear;
+}
+
+.bar-cap {
+	font-size: 9px;
+	letter-spacing: 3px;
+	color: rgba(255, 255, 255, 0.35);
+	margin-top: 3px;
+}
+
+/* ============================ PROMPT ============================ */
+#prompt {
+	position: absolute;
+	bottom: 30px;
+	left: 50%;
+	transform: translateX(-50%);
+	font-size: 12px;
+	letter-spacing: 4px;
+	color: rgba(255, 255, 255, 0.62);
+	text-shadow: 0 1px 8px rgba(0, 0, 0, 0.75);
+	white-space: nowrap;
+}
+
+#prompt-key {
+	margin-left: 10px;
+	padding: 2px 8px;
+	border-radius: 3px;
+	font-size: 10px;
+	letter-spacing: 2px;
+	color: var(--cyan);
+	border: 1px solid rgba(126, 207, 192, 0.4);
+	background: rgba(10, 30, 32, 0.6);
+}
+
+/* ============================ CATCH CARD ============================ */
+#card {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -60%);
+	text-align: center;
+	padding: 16px 34px;
+	border-radius: 8px;
+	background: rgba(9, 26, 30, 0.82);
+	border: 1px solid rgba(240, 205, 134, 0.45);
+	box-shadow: 0 10px 50px rgba(0, 0, 0, 0.5);
+}
+
+#card.pop {
+	animation: cardIn 0.45s cubic-bezier(0.2, 1.5, 0.4, 1);
+}
+
+@keyframes cardIn {
+	from {
+		transform: translate(-50%, -60%) scale(0.7);
+		opacity: 0;
+	}
+	to {
+		transform: translate(-50%, -60%) scale(1);
+		opacity: 1;
+	}
+}
+
+#card-name {
+	font-size: 19px;
+	font-weight: 700;
+	letter-spacing: 7px;
+	color: var(--cyan);
+}
+
+#card-weight {
+	font-size: 30px;
+	font-weight: 700;
+	letter-spacing: 2px;
+	color: #fff;
+	margin: 2px 0;
+	font-variant-numeric: tabular-nums;
+}
+
+#card-score {
+	font-size: 15px;
+	font-weight: 700;
+	letter-spacing: 3px;
+	color: var(--orange-hot);
+}
+
+/* ============================ TOAST ============================ */
+.toast {
+	position: absolute;
+	top: 122px;
+	left: 50%;
+	transform: translateX(-50%);
+	font-size: 11px;
+	letter-spacing: 5px;
+	padding: 6px 16px;
+	border-radius: 4px;
+	color: rgba(255, 255, 255, 0.8);
+	background: rgba(9, 24, 30, 0.72);
+	border: 1px solid rgba(255, 255, 255, 0.14);
+	white-space: nowrap;
+}
+
+.toast.good {
+	color: var(--calm);
+	border-color: rgba(159, 216, 198, 0.45);
+}
+
+.toast.bad {
+	color: var(--danger);
+	border-color: rgba(224, 112, 63, 0.45);
+}
+
+/* ============================ PERF ============================ */
+#perf {
+	position: absolute;
+	bottom: 10px;
+	right: 12px;
+	font-size: 10px;
+	letter-spacing: 2px;
+	color: rgba(255, 255, 255, 0.4);
+	font-variant-numeric: tabular-nums;
+}
+
+#perf .cap {
+	margin: 0 6px 0 3px;
+	color: rgba(255, 255, 255, 0.25);
+}
+
+/* ============================ GAME OVER STATS ============================ */
+.go-stats {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+	gap: 10px;
+	max-width: 520px;
+	margin: 0 auto 14px;
+}
+
+.go-stats div {
+	padding: 8px 4px;
+	border-radius: 5px;
+	background: rgba(255, 255, 255, 0.045);
+}
+
+.go-stats span {
+	display: block;
+	font-size: 9px;
+	letter-spacing: 2.5px;
+	color: rgba(255, 255, 255, 0.4);
+}
+
+.go-stats b {
+	display: block;
+	font-size: 19px;
+	letter-spacing: 1px;
+	color: #fff;
+	font-variant-numeric: tabular-nums;
+	margin-top: 2px;
+}
+
+#go-rank {
+	font-size: 12px;
+	letter-spacing: 6px;
+	color: var(--cyan);
+	margin-bottom: 18px;
+}
+
+#go-submit label {
+	display: block;
+	font-size: 10px;
+	letter-spacing: 4px;
+	color: rgba(255, 255, 255, 0.45);
+	margin-bottom: 6px;
+}
+
+#go-submit {
+	margin: 0 auto 18px;
+	max-width: 420px;
+}
+
+#go-submit-msg {
+	min-height: 16px;
+	margin-top: 8px;
+	font-size: 11px;
+	letter-spacing: 2px;
+	color: var(--cyan);
+}
+
+#go-submit-msg.warn {
+	color: var(--orange-hot);
+}
+
+/* ============================ SMALL SCREENS ============================ */
+@media (max-width: 900px), (max-height: 560px) {
+	#top-bar {
+		gap: 14px;
+		padding: 10px 12px;
+	}
+
+	#clock {
+		font-size: 22px;
+	}
+
+	#score {
+		font-size: 19px;
+	}
+
+	#flow {
+		font-size: 16px;
+	}
+
+	#tally {
+		top: 58px;
+		left: 12px;
+	}
+
+	.pip {
+		width: 27px;
+	}
+
+	#fighting {
+		bottom: 62px;
+	}
+
+	.how {
+		display: none;
+	}
+
+	#card {
+		padding: 12px 24px;
+	}
+
+	#card-weight {
+		font-size: 24px;
+	}
+}

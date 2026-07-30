@@ -52,6 +52,12 @@ jobs:
         with:
           enablement: true
 
+      # Test files live next to the code they test, which is right for editing
+      # and wrong for shipping — they import "vitest", which no importmap on the
+      # page resolves. Nothing loads them, but they don't belong on a public site.
+      - name: Drop test files from the artifact
+        run: rm -f site/**/*.test.js site/*/src/*.test.js
+
       - name: Upload site/ as the Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
@@ -82,6 +88,31 @@ jobs:
                    hub.js \
                    nova/style.css \
                    nova/src/main.js \
+                   nova/src/hero.js \
+                   nova/src/enemies.js \
+                   nova/src/world.js \
+                   nova/src/projectiles.js \
+                   nova/src/hud.js \
+                   nova/src/fx.js \
+                   nova/src/audio.js \
+                   nova/src/quality.js \
+                   nova/src/touch.js \
+                   fish/ \
+                   fish/style.css \
+                   fish/src/main.js \
+                   fish/src/fish.js \
+                   fish/src/fishmesh.js \
+                   fish/src/lake.js \
+                   fish/src/rod.js \
+                   fish/src/hud.js \
+                   fish/src/pointer.js \
+                   fish/src/audio.js \
+                   fish/src/quality.js \
+                   fish/src/fx.js \
+                   vendor/jsm/postprocessing/EffectComposer.js \
+                   vendor/jsm/postprocessing/RenderPass.js \
+                   vendor/jsm/postprocessing/UnrealBloomPass.js \
+                   vendor/jsm/postprocessing/OutputPass.js \
                    favicon.svg \
                    preview.png; do
             # --retry-all-errors so Pages propagation lag gets another go; a file

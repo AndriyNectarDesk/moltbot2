@@ -1,0 +1,6 @@
+# The games are LF everywhere; the "diff the copied modules to find the seam"
+# workflow in site/README.md only works if a copy differs from its original by
+# real changes rather than by line endings.
+* text=auto eol=lf
+*.png binary
+*.svg text eol=lf

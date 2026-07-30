@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta
+			name="viewport"
+			content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+		/>
+		<meta name="mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+		<title>MIKE: QUIET WATER</title>
+		<meta
+			name="description"
+			content="Three minutes on the lake at dawn. Read the water, set the hook, and hold your nerve."
+		/>
+		<meta name="theme-color" content="#132a3e" />
+		<link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+		<link rel="stylesheet" href="../shared/base.css" />
+		<link rel="stylesheet" href="./style.css" />
+
+		<meta property="og:type" content="website" />
+		<meta property="og:title" content="MIKE: QUIET WATER" />
+		<meta
+			property="og:description"
+			content="Three minutes on the lake at dawn. Read the water, set the hook, and hold your nerve."
+		/>
+		<!-- absolute so link scrapers resolve it; update if you host elsewhere -->
+		<meta property="og:image" content="https://andriynectardesk.github.io/moltbot2/preview.png" />
+		<meta name="twitter:card" content="summary_large_image" />
+		<script type="importmap">
+			{
+				"imports": {
+					"three": "../vendor/three.module.min.js",
+					"three/addons/": "../vendor/jsm/"
+				}
+			}
+		</script>
+	</head>
+	<body>
+		<div id="app">
+			<canvas id="scene"></canvas>
+
+			<!-- ============ HUD ============ -->
+			<div id="hud" class="hidden">
+				<div id="top-bar">
+					<div id="clock-box">
+						<span id="clock">3:00</span>
+						<span class="cap">LEFT</span>
+					</div>
+					<div id="score-box">
+						<span id="score">0</span>
+						<span class="cap">WEIGHT SCORE</span>
+					</div>
+					<div id="flow-wrap">
+						<span id="flow">1.0×</span>
+						<span class="cap">FLOW</span>
+					</div>
+					<button id="btn-pause" title="Pause">II</button>
+				</div>
+
+				<div id="tally"></div>
+
+				<!-- what the water under the reticle is called -->
+				<div id="spot" class="hidden"></div>
+
+				<!-- cast power -->
+				<div id="power" class="hidden">
+					<div id="power-fill"></div>
+				</div>
+
+				<!-- the fight instruments -->
+				<div id="fighting" class="hidden">
+					<div id="fight-name">FISH</div>
+					<div id="tension">
+						<div id="tension-fill"></div>
+						<div id="tension-mark"></div>
+					</div>
+					<div class="bar-cap">LINE TENSION</div>
+					<div id="line-bar">
+						<div id="line-fill"></div>
+					</div>
+					<div class="bar-cap">BROUGHT IN</div>
+				</div>
+
+				<div id="prompt" class="hidden">HOLD TO CAST<b id="prompt-key"></b></div>
+
+				<!-- the catch card -->
+				<div id="card" class="hidden">
+					<div id="card-name">PERCH</div>
+					<div id="card-weight">0 g</div>
+					<div id="card-score">+0</div>
+				</div>
+
+				<div id="toast" class="toast hidden"></div>
+
+				<div id="perf" class="hidden">
+					<span id="perf-fps">60</span><span class="cap">FPS</span>
+					<span id="perf-tier">HIGH</span>
+				</div>
+			</div>
+
+			<!-- ============ SCREENS ============ -->
+			<div id="title" class="screen">
+				<div class="t-inner">
+					<a class="t-back" href="../">&larr; ALL GAMES</a>
+					<div class="t-kicker">NECTAR ARCADE PRESENTS</div>
+					<h1 class="t-title"><span>MIKE</span><em>QUIET WATER</em></h1>
+					<p class="t-sub">
+						Three minutes on the lake before anyone else is up. Read the surface,
+						wait for the float to go under, then hold your nerve.
+					</p>
+					<button id="btn-play">CAST OFF</button>
+
+					<div class="t-keys">
+						<div><b>HOLD</b> wind up a cast</div>
+						<div><b>LET GO</b> send it</div>
+						<div><b>TAP</b> set the hook</div>
+						<div><b>HOLD</b> reel it in</div>
+					</div>
+
+					<div class="how">
+						<div class="how-row">
+							<b>Read the water.</b> Rings mean a fish just rose. Lily pads and the
+							shade under the dock always hold something. A shimmer crossing the
+							lake is the best water there is.
+						</div>
+						<div class="how-row">
+							<b>Learn the tells.</b> A flurry of little taps is a sunfish. One
+							solid thump is a bass. If the float just leans over and keeps going,
+							something big has it — strike once it goes under, not before.
+						</div>
+						<div class="how-row">
+							<b>Keep it tight, but watch it.</b> A tighter line brings the fish in
+							faster — and reeling is also what tightens it. Before every run the
+							fish gathers itself and the bar flashes <b>LET GO</b>. Let go then and
+							you ride the run out. Hold on through it and the line snaps.
+						</div>
+					</div>
+
+					<div id="title-board" class="board board-compact"></div>
+					<div class="t-foot">
+						Graphics tune themselves to your device — change them any time from the
+						pause button.
+					</div>
+				</div>
+			</div>
+
+			<div id="pause" class="screen hidden">
+				<div class="t-inner">
+					<h2>PAUSED</h2>
+					<button id="btn-resume">BACK TO THE WATER</button>
+					<button id="btn-quit" class="ghost">END THE MORNING</button>
+					<label class="toggle"
+						><input type="checkbox" id="opt-audio" checked /> Sound</label
+					>
+					<label class="toggle"
+						><input type="checkbox" id="opt-bloom" checked /> Glitter on the water</label
+					>
+					<label class="slider"
+						>Graphics
+						<select id="opt-quality">
+							<option value="auto">Auto</option>
+							<option value="high">High</option>
+							<option value="medium">Medium</option>
+							<option value="low">Low</option>
+							<option value="potato">Potato</option>
+						</select>
+					</label>
+					<label class="toggle"><input type="checkbox" id="opt-fps" /> Show FPS</label>
+				</div>
+			</div>
+
+			<div id="gameover" class="screen hidden">
+				<div class="t-inner">
+					<h2 id="go-title">LINES IN</h2>
+					<div class="go-stats">
+						<div><span>SCORE</span><b id="go-score">0</b></div>
+						<div><span>LANDED</span><b id="go-landed">0</b></div>
+						<div><span>HEAVIEST</span><b id="go-heaviest">0g</b></div>
+						<div><span>SPECIES</span><b id="go-species">0/5</b></div>
+						<div><span>BEST FLOW</span><b id="go-flow">1.0×</b></div>
+					</div>
+					<div id="go-rank">DAY TRIPPER</div>
+
+					<div id="go-submit">
+						<label>WHO'S PLAYING</label>
+						<div class="who-row">
+							<button class="who" data-who="danylo">DANYLO</button>
+							<button class="who" data-who="mike">MIKE</button>
+							<button class="who" data-who="sofia">SOFIA</button>
+							<button class="who" data-who="guest">GUEST</button>
+						</div>
+						<div class="name-row">
+							<span id="go-pin-wrap" class="hidden">
+								<input
+									id="go-pin"
+									class="pin-input"
+									type="password"
+									inputmode="numeric"
+									maxlength="8"
+									placeholder="PIN"
+									autocomplete="off"
+									spellcheck="false"
+								/>
+							</span>
+							<button id="btn-submit" class="small">POST SCORE</button>
+						</div>
+						<div id="go-submit-msg"></div>
+					</div>
+
+					<div id="go-board" class="board"></div>
+					<button id="btn-again">ANOTHER MORNING</button>
+				</div>
+			</div>
+
+			<div id="rotate" class="screen hidden">
+				<div class="t-inner">
+					<h2>TURN SIDEWAYS</h2>
+					<p class="t-sub">The lake needs a wider view. Rotate your device to landscape.</p>
+				</div>
+			</div>
+
+			<div id="loading" class="screen">
+				<div class="t-inner">
+					<div class="spinner"></div>
+					<p>ROWING OUT…</p>
+				</div>
+			</div>
+		</div>
+
+		<script type="module" src="./src/main.js"></script>
+	</body>
+</html>

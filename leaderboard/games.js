@@ -24,6 +24,12 @@ export const GAMES = {
 			kills: { min: 0, max: 100_000 },
 			combo: { min: 1, max: 8 },
 		},
+		// Stats where sitting exactly on the declared ceiling is not a boast but a
+		// tell. Only list a stat here if its max is an absurd outer bound — a real
+		// run reaches wave 10, not 500. `combo` is deliberately absent: the game
+		// caps it at 8 and a good player hits that most runs, so flagging it would
+		// bury the dashboard in false positives and teach Andriy to ignore flags.
+		suspiciousMax: ["wave", "kills"],
 		// A loose ceiling: even a perfect run can't out-earn this. Kept from v1.
 		// It no longer rejects — see FLAG_ONLY below.
 		plausible: (score, s) => score <= s.wave * 200_000 + 100_000,
@@ -31,15 +37,25 @@ export const GAMES = {
 
 	fish: {
 		label: "MIKE: QUIET WATER",
+		// One landed fish is enough to be in the running. The smallest sunfish is
+		// worth 1, so a blank morning still scores 0 and earns nothing.
 		qualify: 1,
 		brag: (s) => (s.heaviest ? `${(s.heaviest / 1000).toFixed(1)}kg` : ""),
 		stats: {
 			landed: { min: 0, max: 500 },
-			heaviest: { min: 0, max: 60_000 }, // grams
-			species: { min: 0, max: 40 },
-			flow: { min: 1, max: 20 },
+			heaviest: { min: 0, max: 20_000 }, // grams; the biggest sturgeon is 17kg
+			species: { min: 0, max: 5 },
+			flow: { min: 10, max: 30 }, // best multiplier ×10, so 1.0× … 3.0×
 		},
-		plausible: null, // TODO Phase 2: set once real scores exist
+		// `species` and `flow` are omitted on purpose: catching all five species
+		// and maxing the flow multiplier are both things the game is asking you to
+		// do, and a measured skilled run hits the flow cap routinely.
+		suspiciousMax: ["landed", "heaviest"],
+		// Tuned against measured play rather than guessed: a simulated attentive
+		// three-minute run scores 10–15k over 14–16 fish, and the single best
+		// possible fish is a 17kg sturgeon at a 3× multiplier, which is 10,200. So a
+		// score far above eleven thousand per landed fish did not come from playing.
+		plausible: (score, s) => score <= s.landed * 11_000 + 500,
 	},
 
 	city: {
@@ -112,7 +128,8 @@ export const FLAGS = {
  */
 export const EYEBROW = {
 	nova: 100_000,
-	fish: null, // TODO Phase 2
+	// A very good measured run lands around 15k; 30k is a morning worth asking about.
+	fish: 30_000,
 	city: null, // TODO Phase 3
 }
 
