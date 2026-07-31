@@ -38,6 +38,7 @@
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.0",
     "@vitest/coverage-v8": "^4.0.18",
+    "happy-dom": "^20.11.1",
     "oxfmt": "^0.28.0",
     "oxlint": "^1.43.0",
     "typescript": "^5.9.3",

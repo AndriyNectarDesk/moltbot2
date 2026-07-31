@@ -33,13 +33,15 @@ import {
 	LIMITS,
 	PlayerShapeError,
 	RESERVED,
-	joinThrottle,
 	normalizeName,
 	pinProblem,
+	purgePlayers,
 	readIndex,
 	readPlayer,
 	registerPlayer,
 	removePlayer,
+	restorePlayer,
+	throttle,
 	touchIndex,
 } from "./players.js"
 import { isWeekKey, nextWeek, weekHasEnded, weekKey } from "./week.js"
@@ -152,13 +154,30 @@ async function readAllBoards(env, week) {
 
 // ---------------------------------------------------------------- identity
 
-/** The family roster from the secret, or null if it is unparseable. */
+/**
+ * The family roster from the secret, or null if it cannot be trusted.
+ *
+ * The keys are put through `normalizeName` and must survive it unchanged. That
+ * looks pedantic until you follow what a stray capital does: `{"Danylo": ...}`
+ * matches no normalized id, so Danylo's own correct PIN stops signing him in as
+ * family and instead REGISTERS HIM as an ordinary self-signup — after which his
+ * name is a KV row anyone can be handed once it's removed. ARCADE.md asks for
+ * this JSON to be hand-typed to rotate the placeholder PINs, so the typo has a
+ * moment scheduled for it. Refusing to serve is the only safe answer: a 500 gets
+ * looked at, a silently demoted kid does not.
+ */
 function familyRoster(env) {
+	let parsed
 	try {
-		return JSON.parse(env.PLAYERS || "{}")
+		parsed = JSON.parse(env.PLAYERS || "{}")
 	} catch {
 		return null
 	}
+	if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null
+	for (const key of Object.keys(parsed)) {
+		if (normalizeName(key) !== key) return null
+	}
+	return parsed
 }
 
 /**
@@ -179,19 +198,26 @@ async function authPlayer(env, body) {
 	const roster = familyRoster(env)
 	if (!roster) return { error: "server roster misconfigured", status: 500 }
 
+	// One refusal for every way of failing. Telling "unknown player" apart from
+	// "wrong pin" turns this endpoint into a free test for whether a name has an
+	// account — which is exactly the question /join is careful not to answer, so
+	// answering it here would have made that care decorative. The wording keeps
+	// the word "pin" because all three games key their WRONG PIN message on it.
+	const refused = { error: "wrong player or pin", status: 403 }
+
 	const player = normalizeName(body.player)
-	if (!player) return { error: "no player", status: 403 }
+	if (!player) return refused
 	const got = await sha256hex(body.pin || "")
 
 	const want = roster[player]
 	if (want) {
-		if (!timingSafeEqual(got, String(want).toLowerCase())) return { error: "wrong pin", status: 403 }
+		if (!timingSafeEqual(got, String(want).toLowerCase())) return refused
 		return { player, kind: "family" }
 	}
 
 	const record = await readPlayer(env, player)
-	if (!record) return { error: "unknown player", status: 403 }
-	if (!timingSafeEqual(got, String(record.pinHash).toLowerCase())) return { error: "wrong pin", status: 403 }
+	if (!record || record.banned || typeof record.pinHash !== "string") return refused
+	if (!timingSafeEqual(got, String(record.pinHash).toLowerCase())) return refused
 	return { player, kind: "open" }
 }
 
@@ -231,8 +257,8 @@ async function handleJoin(request, env, origin) {
 	const roster = familyRoster(env)
 	if (!roster) return json({ error: "server roster misconfigured" }, 500, origin)
 
-	// Throttle before either lookup, so the failure path costs one KV read.
-	const limited = await joinThrottle(env, request)
+	// Before either lookup, so a guesser's failures cost nothing but the check.
+	const limited = await throttle(env, request, "join")
 	if (limited) return json({ error: limited }, 429, origin)
 
 	const hash = await sha256hex(body.pin)
@@ -246,7 +272,10 @@ async function handleJoin(request, env, origin) {
 
 	const existing = await readPlayer(env, player)
 	if (existing) {
-		if (!timingSafeEqual(hash, String(existing.pinHash).toLowerCase())) {
+		// A tombstone is a name that was thrown off the board. It refuses like any
+		// other taken name, so being removed is not something you undo by typing
+		// the same two things again.
+		if (existing.banned || !timingSafeEqual(hash, String(existing.pinHash).toLowerCase())) {
 			return json({ error: taken.error }, taken.status, origin)
 		}
 		// Repairs a signup whose index write didn't land; a no-op otherwise.
@@ -261,8 +290,25 @@ async function handleJoin(request, env, origin) {
 
 // ---------------------------------------------------------------- projections
 
-/** What a player is allowed to see. Flags and rate state are for the dashboard only. */
-const publicEntry = (e) => ({ player: e.player, score: e.score, at: e.at, stats: e.stats })
+/** The three names that came from the secret. Everyone else is a visitor. */
+const familyNames = (env) => new Set(Object.keys(familyRoster(env) || {}))
+
+/**
+ * What a player is allowed to see. Flags and rate state are for the dashboard only.
+ *
+ * `visitor` is public on purpose. The dashboard has marked non-family players
+ * since open signup shipped, but the kids never see the dashboard — they see
+ * these tables, and a name is not proof of who somebody is. Two rows reading
+ * DANYLO, one of them a visitor, is a fact the kids should be able to see
+ * without asking their dad to log in.
+ */
+const publicEntry = (family) => (e) => ({
+	player: e.player,
+	score: e.score,
+	at: e.at,
+	stats: e.stats,
+	visitor: !family.has(e.player),
+})
 
 /**
  * Kinds where the value names a distinct thing rather than measuring one.
@@ -302,7 +348,7 @@ async function handleTop(env, origin, gameId, url) {
 			game: gameId,
 			label: GAMES[gameId].label,
 			week: resolved,
-			entries: ranked.slice(0, limit).map(publicEntry),
+			entries: ranked.slice(0, limit).map(publicEntry(familyNames(env))),
 			total: ranked.length,
 		},
 		200,
@@ -321,7 +367,15 @@ async function handleScore(request, env, origin, gameId) {
 	}
 
 	const auth = await authPlayer(env, body)
-	if (auth.error) return json({ error: auth.error }, auth.status, origin)
+	if (auth.error) {
+		// The PIN is the only real gate on writing, and this endpoint is the one
+		// an attacker would walk it at — /join's throttle is worth nothing if the
+		// same guesses are free here. Only failures are charged, so an honest
+		// player never meets this and an accepted submission still costs one write.
+		const limited = await throttle(env, request, "auth")
+		if (limited) return json({ error: limited }, 429, origin)
+		return json({ error: auth.error }, auth.status, origin)
+	}
 
 	const problem = validate(game, body)
 	if (problem) return json({ error: problem }, 400, origin)
@@ -352,7 +406,7 @@ async function handleScore(request, env, origin, gameId) {
 				week,
 				rank: ranked.findIndex((e) => e.player === auth.player) + 1,
 				points: pointsFor(gameId, ranked, auth.player),
-				entries: ranked.slice(0, MAX_RETURN).map(publicEntry),
+				entries: ranked.slice(0, MAX_RETURN).map(publicEntry(familyNames(env))),
 			},
 			200,
 			origin,
@@ -426,7 +480,7 @@ async function handleScore(request, env, origin, gameId) {
 			week,
 			rank: rank || null,
 			points: pointsFor(gameId, ranked, auth.player),
-			entries: ranked.slice(0, MAX_RETURN).map(publicEntry),
+			entries: ranked.slice(0, MAX_RETURN).map(publicEntry(familyNames(env))),
 		},
 		200,
 		origin,
@@ -457,12 +511,13 @@ async function handleJoint(env, origin, url) {
 
 	const boards = await readAllBoards(env, week)
 	const proposal = payoutProposal(boards)
+	const family = familyNames(env)
 	return json(
 		{
 			week,
 			closed: false,
 			closesAfter: nextWeek(week),
-			standings: proposal.joint,
+			standings: proposal.joint.map((p) => ({ ...p, visitor: !family.has(p.player) })),
 			perGame: Object.fromEntries(
 				GAME_IDS.map((id) => [
 					id,
@@ -475,6 +530,7 @@ async function handleJoint(env, origin, url) {
 							place: p.place,
 							points: p.points,
 							stats: p.stats,
+							visitor: !family.has(p.player),
 						})),
 					},
 				]),
@@ -610,13 +666,52 @@ async function handlePayout(request, env) {
 }
 
 /**
+ * Clear one player's entries from one week's boards.
+ *
+ * Split out because both removing a player and purging a squat need it, and
+ * because it must happen BEFORE the account goes: a BoardShapeError halfway
+ * through the other order leaves the name free with the scores still standing —
+ * removed from the registry, still on the board, still in the payout proposal.
+ */
+async function clearEntries(env, ids, week) {
+	const targets = new Set(ids)
+	const cleared = {}
+	for (const gameId of GAME_IDS) {
+		const board = await readBoard(env, gameId, week)
+		const kept = board.entries.filter((e) => !targets.has(e.player))
+		if (kept.length !== board.entries.length) {
+			cleared[gameId] = board.entries.length - kept.length
+			board.entries = kept
+			await writeBoard(env, board)
+		}
+	}
+	return cleared
+}
+
+/**
+ * The week a removal acts on, or an error response.
+ *
+ * The dashboard can be looking at an older week than today's, so it says which
+ * one it means rather than letting the two disagree about what got cleared. A
+ * closed week is refused outright: the frozen snapshot is what a kid re-checks
+ * the arithmetic against, and history that can be edited is worth nothing.
+ */
+async function removalWeek(env, body) {
+	const week = String(body.week || "") || weekKey(nowMs(env))
+	if (!isWeekKey(week)) return { error: adminJson({ error: "bad week" }, 400) }
+	if (await env.SCORES.get(finalKey(week))) {
+		return { error: adminJson({ error: `week ${week} is closed — its standings are frozen`, week }, 409) }
+	}
+	return { week }
+}
+
+/**
  * Remove a self-registered player, and take this week's scores with them.
  *
  * Signup is open to anyone who finds the URL, so this is the counterweight: the
  * one button that gets a stranger off a board a cash prize is riding on. It
- * clears the CURRENT week only, and deliberately never touches a frozen
- * snapshot — a week that has been closed is history, and history that can be
- * edited is worth nothing to a kid disputing a payout.
+ * leaves a tombstone, so being removed is not undone by signing up again with
+ * the same two words — see `removePlayer`.
  *
  * Family players are refused: their PINs live in a secret, so removing the KV
  * record would delete nothing and imply otherwise.
@@ -637,26 +732,57 @@ async function handleRemovePlayer(request, env) {
 		return adminJson({ error: "family players live in the PLAYERS secret — edit it with wrangler" }, 400)
 	}
 
-	// The dashboard can be looking at an older week than today's, so it says which
-	// one it means rather than letting the two disagree about what got cleared.
-	const week = String(body.week || "") || weekKey(nowMs(env))
-	if (!isWeekKey(week)) return adminJson({ error: "bad week" }, 400)
-	if (await env.SCORES.get(finalKey(week))) {
-		return adminJson({ error: `week ${week} is closed — its standings are frozen`, week }, 409)
-	}
+	const resolved = await removalWeek(env, body)
+	if (resolved.error) return resolved.error
 
-	const removed = await removePlayer(env, id)
-	const cleared = {}
-	for (const gameId of GAME_IDS) {
-		const board = await readBoard(env, gameId, week)
-		const kept = board.entries.filter((e) => e.player !== id)
-		if (kept.length !== board.entries.length) {
-			cleared[gameId] = board.entries.length - kept.length
-			board.entries = kept
-			await writeBoard(env, board)
-		}
+	const cleared = await clearEntries(env, [id], resolved.week)
+	const removed = await removePlayer(env, id, nowMs(env))
+	return adminJson({ ok: true, player: id, removed, week: resolved.week, cleared })
+}
+
+/**
+ * Throw off every self-registered player, or everyone who signed up before a
+ * given moment, and clear their scores for the week in view.
+ *
+ * The registry holds 60 names and a single address can fill it in about an hour,
+ * after which the next real friend is told the arcade is full. Undoing that one
+ * row at a time is not a recovery. `before` lets a squat be cleared without
+ * taking out the friends who signed up after it.
+ */
+async function handlePurgePlayers(request, env) {
+	let body
+	try {
+		body = await request.json()
+	} catch {
+		return adminJson({ error: "invalid JSON" }, 400)
 	}
-	return adminJson({ ok: true, player: id, removed, week, cleared })
+	const before = body.before === undefined || body.before === null ? Infinity : Number(body.before)
+	if (!Number.isFinite(before) && before !== Infinity) return adminJson({ error: "bad before" }, 400)
+
+	const resolved = await removalWeek(env, body)
+	if (resolved.error) return resolved.error
+
+	const index = await readIndex(env)
+	const doomed = index.players.filter((p) => !Number.isFinite(before) || p.at < before).map((p) => p.id)
+	if (!doomed.length) return adminJson({ ok: true, removed: [], week: resolved.week, cleared: {} })
+
+	const cleared = await clearEntries(env, doomed, resolved.week)
+	const removed = await purgePlayers(env, { before, at: nowMs(env) })
+	return adminJson({ ok: true, removed, week: resolved.week, cleared })
+}
+
+/** Lift a ban, putting the name back in circulation. */
+async function handleRestorePlayer(request, env) {
+	let body
+	try {
+		body = await request.json()
+	} catch {
+		return adminJson({ error: "invalid JSON" }, 400)
+	}
+	const id = normalizeName(body.player)
+	if (!id) return adminJson({ error: "bad player" }, 400)
+	const restored = await restorePlayer(env, id)
+	return adminJson({ ok: true, player: id, restored })
 }
 
 /** Everyone who can post, and which of the two registries they came from. */
@@ -666,7 +792,26 @@ async function adminPlayers(env) {
 	return {
 		family: Object.keys(roster).sort(),
 		open: index.players,
+		banned: index.banned,
 		max: LIMITS.maxOpenPlayers,
+	}
+}
+
+/**
+ * The same, but never fatal.
+ *
+ * The dashboard's job is the standings, the flag column and the close button,
+ * and a corrupt registry key used to take all three down with it — the page
+ * 500'd and there was no way back from inside the UI. The registry is worth
+ * refusing to WRITE over; it is not worth refusing to show a week's standings
+ * for. `error` is rendered in place of the Players section.
+ */
+async function adminPlayersSafe(env) {
+	try {
+		return await adminPlayers(env)
+	} catch (err) {
+		if (!(err instanceof PlayerShapeError)) throw err
+		return { family: Object.keys(familyRoster(env) || {}).sort(), open: [], banned: [], max: LIMITS.maxOpenPlayers, error: err.key }
 	}
 }
 
@@ -720,7 +865,7 @@ export default {
 							closedAt: snapshot ? snapshot.closedAt : null,
 							ended: weekHasEnded(week, nowMs(env)),
 							payouts: log.items.filter((p) => p.week === week),
-							players: await adminPlayers(env),
+							players: await adminPlayersSafe(env),
 						}),
 					)
 				}
@@ -739,6 +884,12 @@ export default {
 				if (request.method === "POST" && path === "/admin/payout") return await handlePayout(request, env)
 				if (request.method === "POST" && path === "/admin/player/remove") {
 					return await handleRemovePlayer(request, env)
+				}
+				if (request.method === "POST" && path === "/admin/players/purge") {
+					return await handlePurgePlayers(request, env)
+				}
+				if (request.method === "POST" && path === "/admin/player/restore") {
+					return await handleRestorePlayer(request, env)
 				}
 				if (request.method === "GET" && path === "/admin/players") {
 					return adminJson(await adminPlayers(env))

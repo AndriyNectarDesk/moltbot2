@@ -459,6 +459,23 @@ h2 {
 	color: var(--orange-hot);
 }
 
+/* Somebody who isn't one of the three kids. The dashboard has always marked
+   these; the kids only ever see these tables, and a name is not proof of who
+   somebody is — two rows reading DANYLO is a thing they should be able to spot
+   without asking their dad to log in. */
+.vis {
+	display: inline-block;
+	vertical-align: 1px;
+	margin-left: 6px;
+	padding: 1px 5px;
+	font-size: 8px;
+	letter-spacing: 1px;
+	color: var(--cyan);
+	background: rgba(49, 230, 255, 0.12);
+	border: 1px solid rgba(49, 230, 255, 0.35);
+	border-radius: 3px;
+}
+
 /* ============================ SCORE TABLE ============================ */
 .board {
 	margin: 0 auto 20px;

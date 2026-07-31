@@ -7,8 +7,8 @@
 // the arcade ships.
 
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { GUEST, Leaderboard, ROSTER, cleanName, normalizeName } from "./leaderboard.js"
-import { NAME_CASES } from "../../test/name-cases.js"
+import { GUEST, Leaderboard, NAME_MAX, NAME_MIN, RESERVED, ROSTER, cleanName, normalizeName, pinProblem } from "./leaderboard.js"
+import { NAME_CASES, NAME_LIMITS, PIN_CASES, RESERVED_NAMES } from "../../test/name-cases.js"
 
 /** Just enough localStorage to exercise the real code paths. */
 function installStorage() {
@@ -462,5 +462,24 @@ describe("who may post", () => {
 		expect(res).toMatchObject({ ok: true, shared: false })
 		expect(b.localEntries()[0].player).toBe(GUEST)
 		expect(globalThis.fetch).not.toHaveBeenCalled()
+	})
+})
+
+// The rest of the duplication. normalizeName had a shared table from the start;
+// these three did not, and a client that reserved a different set of names or a
+// different PIN length would only show up as a confusing round trip.
+describe("the other rules also agree with the worker", () => {
+	for (const [pin, ok, why] of PIN_CASES) {
+		it(`${JSON.stringify(pin)} is ${ok ? "fine" : "no good"} (${why})`, () => {
+			expect(pinProblem(pin) === null).toBe(ok)
+		})
+	}
+
+	it("reserves the same names", () => {
+		expect([...RESERVED].sort()).toEqual([...RESERVED_NAMES].sort())
+	})
+
+	it("uses the same length bounds", () => {
+		expect({ min: NAME_MIN, max: NAME_MAX }).toEqual(NAME_LIMITS)
 	})
 })

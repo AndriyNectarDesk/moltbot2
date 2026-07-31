@@ -40,7 +40,7 @@ function renderJoint(standings) {
 			return (
 				`<div class="board-row top-${i + 1}">` +
 				`<span class="rk">${i + 1}</span>` +
-				`<span class="nm">${shout(p.player)}</span>` +
+				`<span class="nm">${shout(p.player)}${p.visitor ? ` <span class="vis">VISITOR</span>` : ""}</span>` +
 				`<span class="pts">${p.total}</span>` +
 				(from ? `<span class="from">${esc(from)}</span>` : "") +
 				`</div>`
@@ -63,7 +63,7 @@ function renderPerGame(perGame) {
 				(p) =>
 					`<div class="board-row top-${p.place}">` +
 					`<span class="rk">${p.place}</span>` +
-					`<span class="nm">${shout(p.player)}</span>` +
+					`<span class="nm">${shout(p.player)}${p.visitor ? ` <span class="vis">VISITOR</span>` : ""}</span>` +
 					`<span class="wv">+${p.points}</span>` +
 					`<span class="sc">${Number(p.score).toLocaleString()}</span>` +
 					`</div>`,

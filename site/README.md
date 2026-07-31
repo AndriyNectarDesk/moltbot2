@@ -140,11 +140,14 @@ board is unreachable · a correct PIN posts and reports a rank plus prize points
 GUEST saves locally and the table says `THIS DEVICE`.
 
 **Signing up:** + NEW PLAYER opens a name and PIN box · a name under two
-characters or with no letter is refused before any request · a taken name says so
-without revealing whether the account exists · a successful signup adds a button
-for that name, fills in the PIN, and flips SAVE HERE to POST SCORE · typing in
-either box must not steer the car or fire the ship · come back later and the name
-is a button, needing only the PIN again.
+characters, with no letter, or mixing scripts is refused before any request · a
+taken name says so without revealing whether the account exists · a successful
+signup adds a button for that name, fills in the PIN, and flips SAVE HERE to POST
+SCORE · typing in either box must not steer the car or fire the ship · come back
+later and the name is a button, needing only the PIN again · save a run as GUEST
+and THEN sign up, and the submit button must come back to life so that run can
+still be posted · anyone who isn't one of the three kids shows a VISITOR tag on
+every board.
 
 **Nova, phone:** portrait shows the rotate screen · landscape shows the stick and
 all five buttons · auto-fire defaults on · starts on a low graphics tier and

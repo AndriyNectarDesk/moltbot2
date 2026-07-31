@@ -26,7 +26,7 @@ leaderboard/          the Cloudflare Worker — see leaderboard/README.md
 ```
 
 Run everything locally with `npm run site` (→ http://127.0.0.1:5180/). Tests are
-`npm test` — **407** of them, and they run in CI on every push and PR.
+`npm test` — **478** of them, and they run in CI on every push and PR.
 
 ---
 
@@ -50,7 +50,11 @@ npx wrangler secret put PLAYERS --config leaderboard/wrangler.jsonc
 npx wrangler secret put DASHBOARD_PASSWORD --config leaderboard/wrangler.jsonc
 ```
 
-`PLAYERS` is a JSON map of player id → **SHA-256 hex of the PIN**. `wrangler
+`PLAYERS` is a JSON map of player id → **SHA-256 hex of the PIN**. The keys must
+be exactly the lowercase ids — `{"Danylo": …}` is refused with a 500 rather than
+served, because it used to demote him to an ordinary self-signup in silence.
+While you are in there, use 6–8 digits: signup being open to the internet makes a
+4-digit PIN worth walking, and the length costs a kid nothing. `wrangler
 secret put` prompts, so the real values are typed and never pass through a
 transcript.
 
@@ -108,17 +112,29 @@ thing that can happen and not a bug.
 
 Because signup is open to anyone with the URL, two things carry the weight:
 
-1. **The dashboard marks them.** Every non-family name in the standings carries a
-   `visitor` badge, decided by "not in the secret" rather than "in the registry",
-   so someone removed but still holding scores does not quietly read as a kid.
-2. **The Players section removes one.** That deletes the account and their scores
-   for the week on screen. It refuses on a closed week, and refuses for family —
-   whose PINs are in a secret and cannot be changed from a web page.
+1. **Everyone is marked, everywhere.** Any name not in the secret carries a
+   `visitor` badge — on the dashboard, on the hub's boards, and in the tables the
+   games themselves show. That last one matters most: the kids never see the
+   dashboard, and a name is not proof of who somebody is.
+2. **The Players section removes one, or all of them.** Removing holds the name,
+   deletes the account and clears their scores for the week on screen. It refuses
+   on a closed week, and refuses for family — whose PINs are in a secret and
+   cannot be changed from a web page. "Remove all self-signups" exists because
+   one address can fill all 60 slots in about an hour, and undoing that one row
+   at a time is not a recovery.
 
-Guards that exist without needing a decision: signup is throttled per IP (10
-tries per 10 minutes, so a 4-digit PIN takes about two weeks to walk), the
-registry caps at 60 self-registered players, and `guest` and friends are
-reserved.
+Guards that exist without needing a decision: signing up and failing to sign in
+are both throttled per IP at the edge (5 a minute, on separate budgets so a
+guesser cannot jam the signup form), the registry caps at 60 self-registered
+players and can be cleared in one action, removed names are held rather than
+freed, `guest` and friends are reserved, and a name mixing writing systems is
+refused — `danylо` with a Cyrillic о is not a name, it is a costume.
+
+**None of that makes a 4-digit PIN secret.** Throttling raises the cost of
+walking one; it does not stop somebody patient, and it never stops somebody with
+many addresses. The PIN buys attribution, not secrecy — the real defence is still
+the flag column and a human approving every payout. When you rotate the
+placeholders, 6 to 8 digits costs a kid nothing and is worth taking.
 
 ## Things not to undo without reading why
 
@@ -151,10 +167,24 @@ that look wrong until you know the reason.
   Another origin's write still succeeds; `curl` ignores the mechanism entirely.
   The gate on writing is the PIN.
 
-- **`/join` says "that name is taken" for a wrong PIN on a name that exists.**
-  (`leaderboard/worker.js`) Identical wording to claiming a kid's name, on
-  purpose: a more helpful message would turn the signup box into a way to find
-  out who has an account and then guess at their PIN.
+- **Every refusal to sign in says the same thing, everywhere.**
+  (`leaderboard/worker.js`) `/join` says "that name is taken" whether the PIN was
+  wrong or the name is a kid's, and the score endpoint says "wrong player or pin"
+  whether or not the account exists. Splitting either into a more helpful pair
+  turns them into a free test for whose account exists. The score endpoint DID
+  say "unknown player" vs "wrong pin" for a while, which made /join's careful
+  wording decorative.
+
+- **Removing a player leaves a tombstone, not a hole.** (`leaderboard/players.js`)
+  Deleting the record outright frees the name, and the person you just threw off
+  re-registers it in one tap with the same PIN — which makes the dashboard's only
+  enforcement action a suggestion. "Allow again" lifts it.
+
+- **The PLAYERS secret is refused unless every key is already a normalized id.**
+  (`leaderboard/worker.js`) `{"Danylo": …}` used to mean Danylo's own correct PIN
+  registered him as an ordinary self-signup instead of signing him in as family —
+  silently, and his name then belonged to a KV row. A 500 gets looked at; a
+  quietly demoted kid does not.
 
 - **Removing a player never touches a closed week.** (`leaderboard/worker.js`)
   The frozen snapshot is what a kid checks the arithmetic against. Editing it

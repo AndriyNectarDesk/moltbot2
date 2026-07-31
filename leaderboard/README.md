@@ -5,16 +5,20 @@ A small Cloudflare Worker backing the weekly score boards for the three games in
 joint board sums prize points across all three.
 
 Free tier covers this comfortably. KV allows 100k reads and 1k writes a day, and
-an accepted submission costs exactly one write. With only the family playing
-that is 3 players × 3 games × 50 accepted runs = 450 writes a week. Open signup
-raises the ceiling to the registry cap, 63 players × 3 × 50, so the real bound
-is now `LIMITS.maxOpenPlayers` in `players.js` — worth remembering before
-raising it.
+an accepted submission costs exactly one write, and nothing else on the hot path
+writes at all — the signup throttle is an edge rate-limit binding precisely so it
+does not.
+
+Be honest about the ceiling, though: 63 players × 3 games × 50 accepted runs is
+9,450 writes a week against a free budget of 7,000. Real play is nowhere near
+that — a kid posts a handful of improvements a week, not fifty — but a full
+registry all playing flat out would exceed it, and `LIMITS.maxOpenPlayers` in
+`players.js` is the dial. Raising it moves that ceiling proportionally.
 
 | File | What it is |
 | --- | --- |
 | `worker.js` | routes, storage, identity, the dashboard mount |
-| `players.js` | who may post: the naming rules and the self-signup registry |
+| `players.js` | who may post: the naming rules, the self-signup registry, the throttle |
 | `week.js` | week boundaries (pure) |
 | `games.js` | the game registry, prize points, validation limits |
 | `scoring.js` | ranking, places, joint standings (pure) |
@@ -43,6 +47,10 @@ npx wrangler secret put PLAYERS --config leaderboard/wrangler.jsonc
 npx wrangler secret put DASHBOARD_PASSWORD --config leaderboard/wrangler.jsonc
 ```
 
+The rate-limit binding in `wrangler.jsonc` needs no setup — the namespace id is
+just a number you pick, and it is created on deploy. Without it the throttle
+fails open, which is what happens under `wrangler dev` and in the tests.
+
 ```bash
 npm run leaderboard:deploy
 ```
@@ -65,7 +73,9 @@ Put the printed URL in [`site/shared/config.js`](../site/shared/config.js) as
 | `POST /admin/payout` | write down a payment that was made |
 | `GET /admin/history` | closed weeks and payouts |
 | `GET /admin/players` | family vs. self-registered, and how many slots are left |
-| `POST /admin/player/remove` | body `{player, week}` → delete a self-registered player and their scores for that week |
+| `POST /admin/player/remove` | body `{player, week}` → hold the name, delete the account, clear their scores for that week |
+| `POST /admin/players/purge` | body `{week, before?}` → the same for every self-registered player, or everyone who signed up before `before` |
+| `POST /admin/player/restore` | body `{player}` → lift a hold, freeing the name |
 
 `stats` is a free-form bag per game — the shooter sends `{wave, kills, combo}`,
 fishing sends `{landed, heaviest, species, flow}`. Each game declares its own
@@ -118,16 +128,25 @@ board, same prize points, same joint standings.
   as the kids. This was an explicit decision, not a default.
 
 `POST /join` both creates and signs in: a wrong PIN on a name that exists reads
-exactly like any other refusal, so it cannot be used to find out who has an
-account. It is throttled per IP (10 tries per 10 minutes), names are capped at
-`maxOpenPlayers`, and reserved words like `guest` are refused.
+exactly like any other refusal. So does every refusal at `POST /g/:game/score` —
+that endpoint told the two apart for a while, which made the care taken at
+`/join` worth nothing. Both are throttled per IP at the edge, on separate
+budgets. Names are capped at `maxOpenPlayers`, reserved words like `guest` are
+refused, and a name mixing writing systems is refused outright, because a
+Cyrillic `о` next to Latin letters is an impersonation and nothing else.
+
+A 4-digit PIN is still not a secret and throttling does not make it one. See
+"Honest limits".
 
 **Signup is open to the internet.** Anyone with the URL can register, which means
-someone unknown could end up in a payout proposal. What stands against that: the
-dashboard marks every non-family player as a `visitor` in the standings, and the
-Players section removes one — deleting the account and their scores for the week
-in view. A week that has already been closed keeps whatever it froze; frozen
-history is not editable, deliberately.
+someone unknown could end up in a payout proposal. What stands against that:
+
+- Everyone who isn't in the secret is marked `visitor` — on the dashboard, on the
+  hub, and in the boards the games show the kids.
+- The Players section removes one, or clears every self-signup at once. Removing
+  holds the name against re-registration; "allow again" lifts that.
+- A week that has already been closed keeps whatever it froze. Frozen history is
+  not editable, deliberately, so a removal can never rewrite a payout.
 
 ## Honest limits
 

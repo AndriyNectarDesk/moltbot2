@@ -26,11 +26,6 @@ export const LIMITS = {
 	// the registry into an unbounded KV bill. 60 is far more friends than three
 	// kids will ever bring home, and it is raised by editing this line.
 	maxOpenPlayers: 60,
-	// PIN brute force: /join is a 4-digit guess oracle, so it is throttled per
-	// IP. Ten tries per ten minutes leaves a typo-prone kid alone and makes
-	// walking 10,000 PINs take about two weeks.
-	joinTriesPerWindow: 10,
-	joinWindowSecs: 600,
 }
 
 const PLAYER_KEY = (id) => `player:${id}`
@@ -64,25 +59,52 @@ export class PlayerShapeError extends Error {
  * The client's copy is a courtesy; this one is the authority.
  */
 export function normalizeName(raw) {
-	// Too long is truncated rather than refused: the input caps at 14 characters
-	// anyway, so the only way here is a paste or a hand-made request, and a kid
-	// who pastes their full name should get a short one, not an error.
 	// Anything that isn't text is not a name: String({}) is "[object Object]",
 	// which survives the character filter and would otherwise register a player
 	// called "object object" from a JSON body with the wrong shape.
 	if (typeof raw !== "string") return ""
-	const name = raw
-		.normalize("NFKC")
-		.replace(/[^\p{L}\p{N} _\-.]/gu, "")
-		.replace(/\s+/g, " ")
-		.trim()
-		.slice(0, LIMITS.nameMax)
-		.toLowerCase()
-		.slice(0, LIMITS.nameMax)
-		.trim()
+
+	// Too long is truncated rather than refused: the input caps at 14 characters
+	// anyway, so the only way here is a paste or a hand-made request, and a kid
+	// who pastes their full name should get a short one, not an error.
+	//
+	// Truncation is by CODE POINT, not by .slice(). Emoji are already filtered
+	// out, but astral letters are not, and cutting one in half leaves a lone
+	// surrogate — two different names could then round-trip to the same bytes in
+	// a KV key and end up sharing one credential record.
+	const name = cut(
+		cut(raw.normalize("NFKC").replace(/[^\p{L}\p{N} _\-.]/gu, "").replace(/\s+/g, " ").trim()).toLowerCase(),
+	).trim()
+
 	if (name.length < LIMITS.nameMin) return ""
 	if (!/\p{L}/u.test(name)) return ""
+	if (mixesScripts(name)) return ""
 	return name
+}
+
+const cut = (s) => Array.from(s).slice(0, LIMITS.nameMax).join("")
+
+/**
+ * Reject a name that mixes writing systems.
+ *
+ * Cyrillic "о" and Latin "o" are different characters that render identically,
+ * so `danylо` and `danylo` are two players, two board rows, and one of them is
+ * pretending to be a kid on a board a cash prize is paid against. NFKC does not
+ * fold these and shouldn't — they are genuinely different letters.
+ *
+ * Whole scripts are allowed, mixtures are not: "зоя" is a name someone in this
+ * family might actually have, "danylо" is not a name anybody has.
+ */
+function mixesScripts(name) {
+	const scripts = new Set()
+	for (const ch of name) {
+		if (!/\p{L}/u.test(ch)) continue
+		if (/\p{Script=Latin}/u.test(ch)) scripts.add("latin")
+		else if (/\p{Script=Cyrillic}/u.test(ch)) scripts.add("cyrillic")
+		else if (/\p{Script=Greek}/u.test(ch)) scripts.add("greek")
+		else scripts.add("other")
+	}
+	return scripts.size > 1
 }
 
 /** Why this PIN is no good, or null. Digits only — every keypad has those. */
@@ -92,19 +114,32 @@ export function pinProblem(pin) {
 
 // ---------------------------------------------------------------- registry
 
+/**
+ * One player record, or null.
+ *
+ * A banned record has no `pinHash` and is a valid shape: removing somebody has
+ * to leave something behind, or the name is free again the moment they are
+ * thrown off and the removal is a formality they undo in one tap.
+ */
 export async function readPlayer(env, id) {
 	const key = PLAYER_KEY(id)
 	const raw = await env.SCORES.get(key, "json")
 	if (raw == null) return null
-	if (raw.v !== 1 || typeof raw.pinHash !== "string") throw new PlayerShapeError(key)
+	if (raw.v !== 1) throw new PlayerShapeError(key)
+	if (raw.banned === true) return raw
+	if (typeof raw.pinHash !== "string") throw new PlayerShapeError(key)
 	return raw
 }
 
 export async function readIndex(env) {
 	const raw = await env.SCORES.get(INDEX_KEY, "json")
-	if (raw == null) return { v: 1, players: [] }
+	if (raw == null) return { v: 1, players: [], banned: [] }
 	if (raw.v !== 1 || !Array.isArray(raw.players)) throw new PlayerShapeError(INDEX_KEY)
-	return raw
+	// `banned` arrived after `players`, so an index written by the first version
+	// of this code is missing it. Absent is empty here — unlike a wrong shape,
+	// which still throws.
+	if (raw.banned !== undefined && !Array.isArray(raw.banned)) throw new PlayerShapeError(INDEX_KEY)
+	return { ...raw, banned: raw.banned || [] }
 }
 
 /**
@@ -138,30 +173,93 @@ export async function touchIndex(env, id, at) {
 	return true
 }
 
-/** Delete an open player. Their past scores are a separate decision — see the worker. */
-export async function removePlayer(env, id) {
-	const record = await readPlayer(env, id)
+/**
+ * Throw a player off, leaving a tombstone in place of their record.
+ *
+ * The tombstone is the point. Deleting outright frees the name, and the person
+ * you just removed re-registers it in one tap with the same PIN — which would
+ * make the dashboard's only enforcement action a suggestion. `restorePlayer`
+ * lifts it.
+ *
+ * A record too corrupt to read is still removed: deleting a bad value is not the
+ * same bet as overwriting one, and the player you most need to remove must not
+ * be the one you cannot.
+ */
+export async function removePlayer(env, id, at) {
+	let existed = false
+	try {
+		existed = (await readPlayer(env, id)) !== null
+	} catch (err) {
+		if (!(err instanceof PlayerShapeError)) throw err
+		existed = true
+	}
+
 	const index = await readIndex(env)
-	const before = index.players.length
+	const listed = index.players.some((p) => p.id === id)
 	index.players = index.players.filter((p) => p.id !== id)
-	if (record) await env.SCORES.delete(PLAYER_KEY(id))
-	if (index.players.length !== before) await env.SCORES.put(INDEX_KEY, JSON.stringify(index))
-	return Boolean(record) || index.players.length !== before
+	if (!index.banned.some((b) => b.id === id)) index.banned.push({ id, at })
+	index.banned.sort((a, b) => a.id.localeCompare(b.id))
+
+	await env.SCORES.put(PLAYER_KEY(id), JSON.stringify({ v: 1, id, banned: true, at }))
+	await env.SCORES.put(INDEX_KEY, JSON.stringify(index))
+	return existed || listed
 }
 
 /**
- * Count a signup attempt against this IP's budget.
+ * Throw off every self-registered player who signed up before `before`.
  *
- * Returns a message when the budget is spent. Fails open with no IP header —
- * that is the local and test case, and the alternative is a worker that cannot
- * be exercised at all off Cloudflare.
+ * The recovery path for a squat: the registry holds 60 names and one address can
+ * fill it in about an hour, at which point the next real friend is told the
+ * arcade is full. Doing that one row at a time through the dashboard is not a
+ * recovery, it is an evening. `before` exists so a squat can be cleared without
+ * throwing off the friends who signed up legitimately after it.
+ *
+ * Returns the ids removed. One index write, one tombstone per player.
  */
-export async function joinThrottle(env, request) {
+export async function purgePlayers(env, { before, at }) {
+	const index = await readIndex(env)
+	const doomed = index.players.filter((p) => !Number.isFinite(before) || p.at < before)
+	if (!doomed.length) return []
+
+	index.players = index.players.filter((p) => !doomed.includes(p))
+	for (const p of doomed) {
+		if (!index.banned.some((b) => b.id === p.id)) index.banned.push({ id: p.id, at })
+	}
+	index.banned.sort((a, b) => a.id.localeCompare(b.id))
+
+	for (const p of doomed) {
+		await env.SCORES.put(PLAYER_KEY(p.id), JSON.stringify({ v: 1, id: p.id, banned: true, at }))
+	}
+	await env.SCORES.put(INDEX_KEY, JSON.stringify(index))
+	return doomed.map((p) => p.id)
+}
+
+/** Lift a ban, freeing the name for anyone — including whoever had it before. */
+export async function restorePlayer(env, id) {
+	const index = await readIndex(env)
+	const wasBanned = index.banned.some((b) => b.id === id)
+	if (!wasBanned) return false
+	index.banned = index.banned.filter((b) => b.id !== id)
+	await env.SCORES.delete(PLAYER_KEY(id))
+	await env.SCORES.put(INDEX_KEY, JSON.stringify(index))
+	return true
+}
+
+/**
+ * Ask the edge whether this address has any budget left.
+ *
+ * `bucket` separates the counters, so somebody guessing PINs at the score
+ * endpoint cannot also jam the signup form for the friend sitting next to them.
+ *
+ * Fails open when the binding is absent — that is `wrangler dev` without the
+ * binding, and the tests. It also fails open with no client IP, which is safe
+ * only because Cloudflare sets that header at the edge and a client cannot
+ * suppress it; off Cloudflare this function is not a control at all.
+ */
+export async function throttle(env, request, bucket) {
+	if (!env.LIMITER) return null
 	const ip = request.headers.get("CF-Connecting-IP") || ""
 	if (!ip) return null
-	const key = `join:${ip}`
-	const tries = Number(await env.SCORES.get(key)) || 0
-	if (tries >= LIMITS.joinTriesPerWindow) return "too many tries — wait a few minutes"
-	await env.SCORES.put(key, String(tries + 1), { expirationTtl: LIMITS.joinWindowSecs })
-	return null
+	const { success } = await env.LIMITER.limit({ key: `${bucket}:${ip}` })
+	return success ? null : "too many tries — wait a minute"
 }

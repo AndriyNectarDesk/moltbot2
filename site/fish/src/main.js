@@ -253,6 +253,13 @@ class Game {
 				msg.classList.remove("warn")
 				// A guest plays for themselves; there's nothing to prove.
 				submitBtn.textContent = this.board.hasIdentity ? "POST SCORE" : "SAVE HERE"
+				// Whoever is playing has changed, so the last submission's outcome no
+				// longer applies. Without this, a friend who taps SAVE HERE and THEN
+				// signs up is left holding a disabled button that reads POST SCORE,
+				// and that run can never reach the board — the exact first-run
+				// experience of the person this signup form exists for.
+				this._submitted = false
+				submitBtn.disabled = false
 			},
 		})
 		pinInput.addEventListener("keydown", (e) => {
@@ -350,7 +357,7 @@ class Game {
 				return (
 					`<div class="board-row top-${i + 1}${you}">` +
 					`<span class="rk">${i + 1}</span>` +
-					`<span class="nm">${name.toUpperCase()}</span>` +
+					`<span class="nm">${name.toUpperCase()}${e.visitor ? ` <span class="vis">VISITOR</span>` : ""}</span>` +
 					`<span class="wv">${brag}</span>` +
 					`<span class="sc">${Number(e.score).toLocaleString()}</span>` +
 					`</div>`

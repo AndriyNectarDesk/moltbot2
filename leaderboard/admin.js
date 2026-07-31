@@ -86,31 +86,64 @@ function gameTable(gameId, info, who) {
  * view — the only way to get a stranger off the standings before you close.
  */
 function playersSection(players) {
+	if (players.error) {
+		return `
+	<section>
+		<h2>Players</h2>
+		<p class="warn">
+			The player registry at <code>${esc(players.error)}</code> is corrupt, so this list and the
+			remove buttons are unavailable. The standings above are unaffected and the week can still be
+			closed. Nothing will overwrite the bad value.
+		</p>
+	</section>`
+	}
+
 	const family = players.family
 		.map((id) => `<li><b>${esc(id)}</b> <span class="dim">family</span></li>`)
 		.join("")
 
+	// The button carries the id in a data attribute and is bound by the page
+	// script. It used to be an inline onclick built with JSON.stringify, whose
+	// quotes closed the HTML attribute early — so the handler never compiled and
+	// the one control that gets a stranger off a cash board did nothing at all,
+	// silently, for anyone who clicked it.
 	const open = players.open.length
 		? players.open
 				.map(
 					(p) => `<li>
 					<b>${esc(p.id)}</b>
 					<span class="dim">signed up ${esc(when(p.at))}</span>
-					<button class="tiny" onclick="drop(${JSON.stringify(p.id)})">remove</button>
+					<button class="tiny drop" data-player="${esc(p.id)}">remove</button>
 				</li>`,
 				)
 				.join("")
 		: `<li class="note">nobody has signed themselves up yet</li>`
+
+	const banned = players.banned.length
+		? `<h3>Removed</h3>
+		<ul class="players">${players.banned
+			.map(
+				(b) => `<li>
+					<b>${esc(b.id)}</b>
+					<span class="dim">removed ${esc(when(b.at))}</span>
+					<button class="tiny restore" data-player="${esc(b.id)}">allow again</button>
+				</li>`,
+			)
+			.join("")}</ul>
+		<p class="note">These names are held, not freed — signing up again with them is refused.</p>`
+		: ""
 
 	return `
 	<section>
 		<h2>Players</h2>
 		<ul class="players">${family}${open}</ul>
 		<p class="note">
-			${players.open.length} of ${players.max} self-signup slots used. Removing a player deletes
-			their account and their scores in the week shown above; a week already closed keeps whatever
-			it froze.
+			${players.open.length} of ${players.max} self-signup slots used. Removing a player holds their
+			name, deletes their account and clears their scores in the week shown above; a week already
+			closed keeps whatever it froze.
 		</p>
+		${players.open.length ? `<button class="tiny" id="purge">Remove all self-signups</button>` : ""}
+		${banned}
 	</section>`
 }
 
@@ -180,6 +213,9 @@ export function renderAdmin({ week, proposal, closed, closedAt, ended, payouts, 
 	ul.players li { display: flex; align-items: center; gap: 10px; padding: 5px 0;
 		border-bottom: 1px solid var(--line); }
 	button.tiny { margin-left: auto; font-size: 11px; padding: 3px 9px; }
+	h3 { font-size: 11px; letter-spacing: 2px; color: var(--dim); margin: 18px 0 4px;
+		text-transform: uppercase; font-weight: 400; }
+	#purge { margin-left: 0; }
 </style>
 </head><body><div class="wrap">
 
@@ -234,16 +270,44 @@ ${paid}
 		alert(r.ok ? "Closed. Winner: " + (d.proposal.jointWinner || "nobody") : "Failed: " + d.error)
 		if (r.ok) location.reload()
 	}
-	async function drop(player) {
-		if (!confirm("Remove " + player + " and delete their scores for week " + week + "?")) return
-		const r = await fetch("/admin/player/remove", {
+	async function admin_(path, body, done) {
+		const r = await fetch(path, {
 			method: "POST",
 			headers: { "Content-Type": "application/json", "X-Prize-Admin": "1" },
-			body: JSON.stringify({ player, week }),
+			body: JSON.stringify(body),
 		})
 		const d = await r.json()
-		alert(r.ok ? "Removed " + player + "." : "Failed: " + d.error)
+		alert(r.ok ? done(d) : "Failed: " + d.error)
 		if (r.ok) location.reload()
+	}
+
+	// Bound here rather than inline in the markup. An inline handler carrying a
+	// player id has to survive HTML attribute quoting, and the first version of
+	// this did not: the id arrived already wrapped in double quotes, which closed
+	// the attribute early, so the handler never compiled and the button failed
+	// silently on click for its whole life.
+	for (const btn of document.querySelectorAll("button.drop")) {
+		btn.onclick = () => {
+			const player = btn.dataset.player
+			if (!confirm("Remove " + player + ", hold their name, and delete their scores for week " + week + "?")) return
+			admin_("/admin/player/remove", { player, week }, () => "Removed " + player + ".")
+		}
+	}
+
+	for (const btn of document.querySelectorAll("button.restore")) {
+		btn.onclick = () => {
+			const player = btn.dataset.player
+			if (!confirm("Allow " + player + " to sign up again?")) return
+			admin_("/admin/player/restore", { player }, () => player + " can sign up again.")
+		}
+	}
+
+	const purgeBtn = document.getElementById("purge")
+	if (purgeBtn) {
+		purgeBtn.onclick = () => {
+			if (!confirm("Remove EVERY self-signed-up player and their scores for week " + week + "? The three kids are unaffected.")) return
+			admin_("/admin/players/purge", { week }, (d) => "Removed " + d.removed.length + " player(s).")
+		}
 	}
 	async function pay() {
 		const player = document.getElementById("p").value.trim()

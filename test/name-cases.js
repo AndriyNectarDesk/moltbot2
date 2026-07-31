@@ -24,4 +24,35 @@ export const NAME_CASES = [
 	["зоя", "зоя", "not everyone in this family types in ASCII"],
 	["zoe!!!", "zoe", "punctuation that isn't . _ or - is dropped"],
 	["mo-mo_1.2", "mo-mo_1.2", "the punctuation that is allowed survives"],
+	// U+043E, the Cyrillic one. Renders identically to the Latin o and would put a
+	// second DANYLO on a board a cash prize is paid against.
+	["danylо", "", "a name mixing scripts is not a name, it is a costume"],
+	["зоя b", "", "…even when the mixture is only a trailing Latin initial"],
+	// Deseret, which is astral: every letter is two UTF-16 units. A .slice() here
+	// would cut one in half and leave a lone surrogate, and two different names
+	// could then end up as the same bytes in a KV key — one credential record
+	// serving two board identities. Also lowercased, which astral letters can be.
+	["\u{10400}".repeat(20), "\u{10428}".repeat(14), "truncation counts characters, not UTF-16 units"],
 ]
+
+/**
+ * The other rules both copies implement, same discipline as the names.
+ *
+ * These are duplicated between `leaderboard/players.js` and
+ * `site/shared/leaderboard.js` too, and were the part of the duplication that
+ * nothing checked.
+ */
+export const PIN_CASES = [
+	["1111", true, "four digits is the floor"],
+	["12345678", true, "eight is the ceiling"],
+	["123", false, "three is too few to be worth typing"],
+	["123456789", false, "nine is past what the input accepts"],
+	["12a4", false, "letters are not on every kid's keypad"],
+	["", false, "nothing is not a PIN"],
+	[null, false, "nor is nothing at all"],
+]
+
+/** Names the arcade keeps for itself. `guest` is what the UI calls local-only play. */
+export const RESERVED_NAMES = ["guest", "anon", "admin", "player", "nobody", "you"]
+
+export const NAME_LIMITS = { min: 2, max: 14 }

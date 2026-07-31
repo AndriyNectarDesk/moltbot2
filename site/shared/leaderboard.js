@@ -106,12 +106,42 @@ function migrateLegacy(game) {
 
 /** Names go on a shared board, so keep them short and printable. */
 export function cleanName(raw) {
-	return String(raw ?? "")
-		.normalize("NFKC")
-		.replace(/[^\p{L}\p{N} _\-.]/gu, "")
-		.replace(/\s+/g, " ")
-		.trim()
-		.slice(0, NAME_MAX)
+	return cut(
+		String(raw ?? "")
+			.normalize("NFKC")
+			.replace(/[^\p{L}\p{N} _\-.]/gu, "")
+			.replace(/\s+/g, " ")
+			.trim(),
+	)
+}
+
+/**
+ * Truncate by code point, not by `.slice()`.
+ *
+ * Astral letters are two UTF-16 units, so slicing can cut one in half and leave
+ * a lone surrogate. Two different names could then normalise to the same bytes
+ * once stored, which on the worker's side means two board identities sharing one
+ * credential record.
+ */
+const cut = (s) => Array.from(s).slice(0, NAME_MAX).join("")
+
+/**
+ * True if this name mixes writing systems — a mirror of the worker's rule.
+ *
+ * Cyrillic "о" and Latin "o" look identical and are not, so `danylо` would sit
+ * on the board next to `danylo` pretending to be him. A whole name in one script
+ * is fine: "зоя" is a name someone here might have.
+ */
+function mixesScripts(name) {
+	const scripts = new Set()
+	for (const ch of name) {
+		if (!/\p{L}/u.test(ch)) continue
+		if (/\p{Script=Latin}/u.test(ch)) scripts.add("latin")
+		else if (/\p{Script=Cyrillic}/u.test(ch)) scripts.add("cyrillic")
+		else if (/\p{Script=Greek}/u.test(ch)) scripts.add("greek")
+		else scripts.add("other")
+	}
+	return scripts.size > 1
 }
 
 /**
@@ -128,9 +158,10 @@ export function cleanName(raw) {
 export function normalizeName(raw) {
 	// Not text, not a name — String({}) would otherwise become "object object".
 	if (typeof raw !== "string") return ""
-	const name = cleanName(raw).toLowerCase().slice(0, NAME_MAX).trim()
+	const name = cut(cleanName(raw).toLowerCase()).trim()
 	if (name.length < NAME_MIN) return ""
 	if (!/\p{L}/u.test(name)) return ""
+	if (mixesScripts(name)) return ""
 	return name
 }
 
