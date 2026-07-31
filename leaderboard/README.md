@@ -48,8 +48,11 @@ npx wrangler secret put DASHBOARD_PASSWORD --config leaderboard/wrangler.jsonc
 ```
 
 The rate-limit binding in `wrangler.jsonc` needs no setup — the namespace id is
-just a number you pick, and it is created on deploy. Without it the throttle
-fails open, which is what happens under `wrangler dev` and in the tests.
+just a number you pick, and it is created on deploy. `wrangler dev` enforces it
+locally too (miniflare implements the binding). It fails open only where the
+binding genuinely isn't there, which in practice means the tests — and also if
+the binding itself throws, deliberately: a throttle that turns into an outage on
+every signup would be worse than no throttle.
 
 ```bash
 npm run leaderboard:deploy
@@ -201,7 +204,7 @@ rather than a cost one.
 npm test
 ```
 
-124 tests across the week maths, the points maths, the worker, and the browser
+480 tests across the week maths, the points maths, the worker, and the browser
 client. `week.js` and `scoring.js` are pure and tested directly, which is where
 most of the payout risk lives. The KV mock honours `put` expiry and counts
 writes, so "one write per accepted submission, none for a non-improvement" is

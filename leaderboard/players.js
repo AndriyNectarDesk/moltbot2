@@ -72,8 +72,21 @@ export function normalizeName(raw) {
 	// out, but astral letters are not, and cutting one in half leaves a lone
 	// surrogate — two different names could then round-trip to the same bytes in
 	// a KV key and end up sharing one credential record.
+	//
+	// Lowercase BEFORE the character filter, and this order is load-bearing. "İ"
+	// lowercases to "i" plus a combining dot, which the filter would have stripped
+	// — so filtering first made this function non-idempotent, and normalizing an
+	// already-normalized id returned a DIFFERENT id. Everything downstream assumes
+	// it doesn't: the dashboard's remove button hands back the id it was rendered
+	// with, which would then resolve to a player who does not exist, report
+	// success, and leave the real one on the board.
 	const name = cut(
-		cut(raw.normalize("NFKC").replace(/[^\p{L}\p{N} _\-.]/gu, "").replace(/\s+/g, " ").trim()).toLowerCase(),
+		raw
+			.normalize("NFKC")
+			.toLowerCase()
+			.replace(/[^\p{L}\p{N} _\-.]/gu, "")
+			.replace(/\s+/g, " ")
+			.trim(),
 	).trim()
 
 	if (name.length < LIMITS.nameMin) return ""
@@ -260,6 +273,14 @@ export async function throttle(env, request, bucket) {
 	if (!env.LIMITER) return null
 	const ip = request.headers.get("CF-Connecting-IP") || ""
 	if (!ip) return null
-	const { success } = await env.LIMITER.limit({ key: `${bucket}:${ip}` })
-	return success ? null : "too many tries — wait a minute"
+	try {
+		const { success } = await env.LIMITER.limit({ key: `${bucket}:${ip}` })
+		return success ? null : "too many tries — wait a minute"
+	} catch {
+		// The binding is a beta product and throwing is its likeliest failure. An
+		// uncaught error here escapes as a 1101 on every signup and every failed
+		// sign-in — a throttle that turns into an outage is worse than no throttle,
+		// and this is the case the paragraph above claimed to cover but didn't.
+		return null
+	}
 }

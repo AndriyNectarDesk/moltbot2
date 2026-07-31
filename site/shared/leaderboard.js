@@ -104,11 +104,20 @@ function migrateLegacy(game) {
 	}
 }
 
-/** Names go on a shared board, so keep them short and printable. */
+/**
+ * Names go on a shared board, so keep them short, lowercase and printable.
+ *
+ * Lowercase happens BEFORE the character filter, matching the worker exactly.
+ * The order matters: "İ" lowercases to "i" plus a combining dot, which the
+ * filter strips — do it the other way round and normalising an already
+ * normalised name gives a different name, which is a bug the worker side wears
+ * far worse than this one does.
+ */
 export function cleanName(raw) {
 	return cut(
 		String(raw ?? "")
 			.normalize("NFKC")
+			.toLowerCase()
 			.replace(/[^\p{L}\p{N} _\-.]/gu, "")
 			.replace(/\s+/g, " ")
 			.trim(),
@@ -158,7 +167,7 @@ function mixesScripts(name) {
 export function normalizeName(raw) {
 	// Not text, not a name — String({}) would otherwise become "object object".
 	if (typeof raw !== "string") return ""
-	const name = cut(cleanName(raw).toLowerCase()).trim()
+	const name = cleanName(raw)
 	if (name.length < NAME_MIN) return ""
 	if (!/\p{L}/u.test(name)) return ""
 	if (mixesScripts(name)) return ""

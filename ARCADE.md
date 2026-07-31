@@ -26,7 +26,7 @@ leaderboard/          the Cloudflare Worker — see leaderboard/README.md
 ```
 
 Run everything locally with `npm run site` (→ http://127.0.0.1:5180/). Tests are
-`npm test` — **478** of them, and they run in CI on every push and PR.
+`npm test` — **490** of them, and they run in CI on every push and PR.
 
 ---
 
@@ -110,12 +110,19 @@ Full equality was asked for deliberately. It means a friend who plays all three
 games once can take the joint prize on their first afternoon, which is a real
 thing that can happen and not a bug.
 
+One address can fill all 60 slots in about twelve minutes at the current
+throttle, so treat a suddenly-full registry as the squat it probably is and use
+"Remove all self-signups".
+
 Because signup is open to anyone with the URL, two things carry the weight:
 
 1. **Everyone is marked, everywhere.** Any name not in the secret carries a
    `visitor` badge — on the dashboard, on the hub's boards, and in the tables the
-   games themselves show. That last one matters most: the kids never see the
-   dashboard, and a name is not proof of who somebody is.
+   games themselves show, including on a week that has already been closed, which
+   is the week a payout gets decided from. That last one matters most: the kids
+   never see the dashboard, and a name is not proof of who somebody is. If the
+   `PLAYERS` secret is ever unreadable, nothing is marked at all rather than
+   everything being marked wrongly.
 2. **The Players section removes one, or all of them.** Removing holds the name,
    deletes the account and clears their scores for the week on screen. It refuses
    on a closed week, and refuses for family — whose PINs are in a secret and
@@ -129,6 +136,13 @@ guesser cannot jam the signup form), the registry caps at 60 self-registered
 players and can be cleared in one action, removed names are held rather than
 freed, `guest` and friends are reserved, and a name mixing writing systems is
 refused — `danylо` with a Cyrillic о is not a name, it is a costume.
+
+Two things that guard does NOT catch, so the `visitor` badge has to: a name in
+one script that mimics another (`МІКЕ`, all Cyrillic, is glyph-identical to MIKE
+once the games uppercase it), and digits standing in for letters (`dany1o`).
+Closing those means a confusables table, which would also start refusing names
+real people have. The badge is on every board precisely because this rule stops
+short.
 
 **None of that makes a 4-digit PIN secret.** Throttling raises the cost of
 walking one; it does not stop somebody patient, and it never stops somebody with

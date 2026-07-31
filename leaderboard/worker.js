@@ -155,6 +155,21 @@ async function readAllBoards(env, week) {
 // ---------------------------------------------------------------- identity
 
 /**
+ * A PLAYERS secret that cannot be trusted.
+ *
+ * Its own error type because every read path used to paper over the null with
+ * `|| {}`, which is worse than the 500 it was trying to avoid: an empty family
+ * means every kid is served `visitor: true` on the boards they actually look at,
+ * and the dashboard lists no family at all. Silently telling Danylo he is a
+ * stranger is the exact outcome the refusal exists to prevent.
+ */
+export class RosterError extends Error {
+	constructor() {
+		super("PLAYERS secret is not a map of normalized player ids")
+	}
+}
+
+/**
  * The family roster from the secret, or null if it cannot be trusted.
  *
  * The keys are put through `normalizeName` and must survive it unchanged. That
@@ -290,8 +305,18 @@ async function handleJoin(request, env, origin) {
 
 // ---------------------------------------------------------------- projections
 
-/** The three names that came from the secret. Everyone else is a visitor. */
-const familyNames = (env) => new Set(Object.keys(familyRoster(env) || {}))
+/**
+ * The three names that came from the secret. Everyone else is a visitor.
+ *
+ * Throws rather than returning an empty set: "we don't know who the family are"
+ * and "there is no family" have to be different answers, or a mis-typed secret
+ * quietly badges all three kids as visitors.
+ */
+function familyNames(env) {
+	const roster = familyRoster(env)
+	if (!roster) throw new RosterError()
+	return new Set(Object.keys(roster))
+}
 
 /**
  * What a player is allowed to see. Flags and rate state are for the dashboard only.
@@ -502,8 +527,25 @@ async function handleJoint(env, origin, url) {
 	// based on can never drift.
 	const snapshot = await readJson(env, finalKey(week), null)
 	if (snapshot) {
+		// The badge is recomputed here rather than frozen into the snapshot: who is
+		// family is a property of the secret, not of the week. Without this the
+		// VISITOR tag vanished from the hub the moment a week closed — which is
+		// precisely the week a payout gets decided from.
+		const family = familyNames(env)
+		const mark = (p) => ({ ...p, visitor: !family.has(p.player) })
 		return json(
-			{ week, closed: true, closedAt: snapshot.closedAt, standings: snapshot.standings, perGame: snapshot.perGame },
+			{
+				week,
+				closed: true,
+				closedAt: snapshot.closedAt,
+				standings: (snapshot.standings || []).map(mark),
+				perGame: Object.fromEntries(
+					Object.entries(snapshot.perGame || {}).map(([id, info]) => [
+						id,
+						{ ...info, places: (info.places || []).map(mark) },
+					]),
+				),
+			},
 			200,
 			origin,
 		)
@@ -689,6 +731,23 @@ async function clearEntries(env, ids, week) {
 }
 
 /**
+ * The player a removal acts on.
+ *
+ * Prefers an exact match against the registry over `normalizeName`. The
+ * dashboard hands back the id it rendered, which is already normalized, so
+ * re-normalizing it should be a no-op — and was not, once, in a way that made the
+ * remove button report success while leaving the player on the board. Matching
+ * what is actually stored means a future slip in the same place cannot do that
+ * again: the id either exists or it doesn't.
+ */
+async function resolveTarget(env, raw, list) {
+	const wanted = String(raw ?? "")
+	const index = await readIndex(env)
+	const exact = index[list].find((p) => p.id === wanted)
+	return exact ? exact.id : normalizeName(raw)
+}
+
+/**
  * The week a removal acts on, or an error response.
  *
  * The dashboard can be looking at an older week than today's, so it says which
@@ -723,7 +782,7 @@ async function handleRemovePlayer(request, env) {
 	} catch {
 		return adminJson({ error: "invalid JSON" }, 400)
 	}
-	const id = normalizeName(body.player)
+	const id = await resolveTarget(env, body.player, "players")
 	if (!id) return adminJson({ error: "bad player" }, 400)
 
 	const roster = familyRoster(env)
@@ -735,8 +794,13 @@ async function handleRemovePlayer(request, env) {
 	const resolved = await removalWeek(env, body)
 	if (resolved.error) return resolved.error
 
-	const cleared = await clearEntries(env, [id], resolved.week)
+	// De-register first, then clear the boards. The other order was chosen when
+	// removal deleted the record — back then, failing halfway left the name free
+	// with the scores standing. Now that removal leaves a tombstone, going first
+	// is strictly better: if clearing a board throws, the player is already unable
+	// to post anything more, and the retry is safe to repeat.
 	const removed = await removePlayer(env, id, nowMs(env))
+	const cleared = await clearEntries(env, [id], resolved.week)
 	return adminJson({ ok: true, player: id, removed, week: resolved.week, cleared })
 }
 
@@ -756,8 +820,14 @@ async function handlePurgePlayers(request, env) {
 	} catch {
 		return adminJson({ error: "invalid JSON" }, 400)
 	}
-	const before = body.before === undefined || body.before === null ? Infinity : Number(body.before)
-	if (!Number.isFinite(before) && before !== Infinity) return adminJson({ error: "bad before" }, 400)
+	// Omitted means everyone. Anything else must be an actual number — Number()
+	// would have accepted the string "Infinity" and read it as "everyone", which
+	// is not what a caller passing a cutoff can possibly have meant.
+	const cutoff = body.before
+	if (cutoff !== undefined && cutoff !== null && !Number.isFinite(cutoff)) {
+		return adminJson({ error: "bad before" }, 400)
+	}
+	const before = cutoff === undefined || cutoff === null ? Infinity : cutoff
 
 	const resolved = await removalWeek(env, body)
 	if (resolved.error) return resolved.error
@@ -766,8 +836,8 @@ async function handlePurgePlayers(request, env) {
 	const doomed = index.players.filter((p) => !Number.isFinite(before) || p.at < before).map((p) => p.id)
 	if (!doomed.length) return adminJson({ ok: true, removed: [], week: resolved.week, cleared: {} })
 
-	const cleared = await clearEntries(env, doomed, resolved.week)
 	const removed = await purgePlayers(env, { before, at: nowMs(env) })
+	const cleared = await clearEntries(env, doomed, resolved.week)
 	return adminJson({ ok: true, removed, week: resolved.week, cleared })
 }
 
@@ -779,7 +849,7 @@ async function handleRestorePlayer(request, env) {
 	} catch {
 		return adminJson({ error: "invalid JSON" }, 400)
 	}
-	const id = normalizeName(body.player)
+	const id = await resolveTarget(env, body.player, "banned")
 	if (!id) return adminJson({ error: "bad player" }, 400)
 	const restored = await restorePlayer(env, id)
 	return adminJson({ ok: true, player: id, restored })
@@ -787,7 +857,8 @@ async function handleRestorePlayer(request, env) {
 
 /** Everyone who can post, and which of the two registries they came from. */
 async function adminPlayers(env) {
-	const roster = familyRoster(env) || {}
+	const roster = familyRoster(env)
+	if (!roster) throw new RosterError()
 	const index = await readIndex(env)
 	return {
 		family: Object.keys(roster).sort(),
@@ -810,8 +881,21 @@ async function adminPlayersSafe(env) {
 	try {
 		return await adminPlayers(env)
 	} catch (err) {
+		if (err instanceof RosterError) {
+			// Same trade as below, for the other half: the page still has to be
+			// reachable, because it is where you go to look when something is wrong.
+			// But with the roster unreadable nothing can be told from anything, so
+			// the badges are suppressed rather than guessed.
+			return { family: [], open: [], banned: [], max: LIMITS.maxOpenPlayers, rosterError: true, unmarked: true }
+		}
 		if (!(err instanceof PlayerShapeError)) throw err
-		return { family: Object.keys(familyRoster(env) || {}).sort(), open: [], banned: [], max: LIMITS.maxOpenPlayers, error: err.key }
+		return {
+			family: Object.keys(familyRoster(env) || {}).sort(),
+			open: [],
+			banned: [],
+			max: LIMITS.maxOpenPlayers,
+			error: err.key,
+		}
 	}
 }
 
@@ -935,6 +1019,12 @@ export default {
 
 			return json({ error: "not found" }, 404, origin)
 		} catch (err) {
+			if (err instanceof RosterError) {
+				// The same answer the write paths already gave. Reads used to serve a
+				// 200 with the family silently empty, which badged all three kids as
+				// visitors on the boards they look at.
+				return json({ error: "server roster misconfigured" }, 500, origin)
+			}
 			if (err instanceof BoardShapeError || err instanceof PlayerShapeError) {
 				// Loud on purpose. The alternative is treating a corrupt board as
 				// empty and then overwriting it, which would destroy a week of

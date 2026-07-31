@@ -30,6 +30,33 @@ describe("normalizeName", () => {
 		})
 	}
 
+	/**
+	 * Normalising an already-normalised id must be a no-op.
+	 *
+	 * It wasn't, once: the character filter ran before `.toLowerCase()`, and "İ"
+	 * lowercases to "i" plus a combining dot that the filter would have stripped.
+	 * So `normalizeName("İvil")` gave `i̇vil` and normalising THAT gave `ivil` — a
+	 * different player. Everything downstream assumes otherwise, and the dashboard
+	 * remove button in particular hands back the id it was rendered with, so it
+	 * reported success while removing somebody who did not exist.
+	 */
+	it("is idempotent, including for letters whose lowercase grows a mark", () => {
+		const probes = [
+			...NAME_CASES.map(([input]) => input),
+			"İvil",
+			"İ".repeat(20),
+			"ǅoe",
+			"ﬁona",
+			"Ⅻzoe",
+			"ǰoe",
+			"ẞoe",
+		]
+		for (const probe of probes) {
+			const once = normalizeName(probe)
+			expect(normalizeName(once), `re-normalising ${JSON.stringify(probe)} → ${JSON.stringify(once)}`).toBe(once)
+		}
+	})
+
 	it("survives values that aren't strings", () => {
 		expect(normalizeName(null)).toBe("")
 		expect(normalizeName(undefined)).toBe("")
@@ -206,6 +233,17 @@ describe("throttle", () => {
 		await throttle(env, req("9.9.9.9"), "auth")
 		expect(await throttle(env, req("9.9.9.9"), "join")).toBeNull()
 		expect(env.LIMITER.calls).toEqual(["auth:9.9.9.9", "join:9.9.9.9"])
+	})
+
+	// A throttle that turns into an outage is worse than no throttle, and the
+	// binding is a beta product whose likeliest failure is exactly this.
+	it("fails open when the binding throws, not just when it is missing", async () => {
+		env.LIMITER = {
+			async limit() {
+				throw new Error("boom")
+			},
+		}
+		await expect(throttle(env, req("9.9.9.9"), "join")).resolves.toBeNull()
 	})
 
 	it("fails open with no binding, and with no client IP", async () => {

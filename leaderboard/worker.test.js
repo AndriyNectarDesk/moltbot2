@@ -1104,9 +1104,38 @@ describe("the PLAYERS secret", () => {
 	it("refuses a key with spaces, punctuation or the wrong length just the same", async () => {
 		for (const bad of [" danylo", "danylo ", "d", "a".repeat(20), "danyl0!"]) {
 			env.PLAYERS = JSON.stringify({ [bad]: sha("1111") })
-			expect((await call("GET", "/g/nova/top")).status).toBe(200) // reads are fine
 			expect((await post("danylo", 12000)).status).toBe(500)
 		}
+	})
+
+	// This used to assert reads were "fine" and never look at what they said. They
+	// said every kid was a visitor: `familyRoster` returning null was swallowed by
+	// `|| {}` on every read path, so the badge added to protect the kids inverted
+	// and called all three of them strangers, with no error anywhere.
+	it("refuses reads too, rather than serving a board with no family on it", async () => {
+		await post("danylo", 12000)
+		env.PLAYERS = JSON.stringify({ Danylo: sha("1111") })
+
+		for (const path of ["/g/nova/top", "/joint", "/admin/players"]) {
+			const r = await (path === "/admin/players" ? admin("GET", path) : call("GET", path))
+			expect(r.status, path).toBe(500)
+			expect((await r.json()).error, path).toMatch(/misconfigured/)
+		}
+	})
+
+	// …except the dashboard, which is where you go to look when something is
+	// wrong. It stays reachable and says what is broken, and marks nobody rather
+	// than marking everybody wrongly.
+	it("still renders the dashboard, unmarked, and says what to fix", async () => {
+		await post("danylo", 12000)
+		env.PLAYERS = JSON.stringify({ Danylo: sha("1111") })
+
+		const r = await admin("GET", "/admin")
+		expect(r.status).toBe(200)
+		const page = await r.text()
+		expect(page).toMatch(/danylo/)
+		expect(page).toMatch(/PLAYERS/)
+		expect(page).not.toMatch(/class="visitor"/)
 	})
 
 	it("says so rather than serving when the secret isn't even JSON", async () => {
@@ -1298,5 +1327,105 @@ describe("visitors are marked where the kids can see them", () => {
 		})
 		const d = await top()
 		expect(d.entries[0].visitor).toBe(true)
+	})
+})
+
+
+describe("a name that re-normalises to something else", () => {
+	// The blocker this closes: the remove button hands back the id it rendered, so
+	// a name whose normalisation was not a fixed point resolved to a player who
+	// did not exist. The button alerted "Removed", reloaded, and left the row —
+	// the same silent no-op the button was rebuilt to stop being.
+	const TRICKY = "İvil"
+
+	it("registers as one stable id", async () => {
+		const r = await join(TRICKY, "4242")
+		expect(r.status).toBe(200)
+		const { player } = await r.json()
+		// Whatever it normalises to, signing in again must reach the same account.
+		expect((await (await join(player, "4242")).json())).toMatchObject({ player, created: false })
+	})
+
+	it("can actually be removed, scores and all", async () => {
+		const { player } = await (await join(TRICKY, "4242")).json()
+		await postAs(player, "4242", 20000)
+		expect((await top()).entries.map((e) => e.player)).toEqual([player])
+
+		const r = await admin("POST", "/admin/player/remove", { player, week: WEEK })
+		expect(await r.json()).toMatchObject({ ok: true, player, removed: true, cleared: { nova: 1 } })
+		expect((await top()).entries).toEqual([])
+
+		const listed = await (await admin("GET", "/admin/players")).json()
+		expect(listed.open).toEqual([])
+		expect(listed.banned.map((b) => b.id)).toEqual([player])
+		// and no phantom second tombstone under a differently-normalised id
+		expect(listed.banned).toHaveLength(1)
+	})
+
+	it("can be let back in again", async () => {
+		const { player } = await (await join(TRICKY, "4242")).json()
+		await admin("POST", "/admin/player/remove", { player, week: WEEK })
+		expect((await admin("POST", "/admin/player/restore", { player })).status).toBe(200)
+		expect((await (await admin("GET", "/admin/players")).json()).banned).toEqual([])
+	})
+})
+
+describe("a closed week keeps its badges", () => {
+	// The badge vanished from the hub the moment a week closed, because the frozen
+	// snapshot has no `visitor` field — so it disappeared for exactly the week a
+	// payout is decided from, while /g/:game/top still showed it. Two boards on
+	// one page, disagreeing.
+	it("marks visitors in the frozen standings too", async () => {
+		await join("zoe", "4242")
+		await postAs("zoe", "4242", 20000)
+		await post("danylo", 9000)
+		await admin("POST", `/admin/close?week=${WEEK}&force=1`)
+
+		const d = await (await call("GET", `/joint?week=${WEEK}`)).json()
+		expect(d.closed).toBe(true)
+		expect(d.standings.map((p) => [p.player, p.visitor])).toEqual([
+			["zoe", true],
+			["danylo", false],
+		])
+		expect(d.perGame.nova.places.map((p) => p.visitor)).toEqual([true, false])
+	})
+
+	it("leaves the snapshot itself untouched", async () => {
+		await join("zoe", "4242")
+		await postAs("zoe", "4242", 20000)
+		await admin("POST", `/admin/close?week=${WEEK}&force=1`)
+		// Recomputed on read, never frozen: who is family is a property of the
+		// secret, not of the week.
+		const snap = await (await call("GET", `/week/${WEEK}`)).json()
+		expect(snap.standings[0].visitor).toBeUndefined()
+	})
+})
+
+describe("purge input", () => {
+	it("refuses a cutoff that isn't a number rather than reading it as everyone", async () => {
+		await join("zoe", "4242")
+		for (const before of ["Infinity", "yesterday", {}, true]) {
+			const r = await admin("POST", "/admin/players/purge", { week: WEEK, before })
+			expect(r.status, JSON.stringify(before)).toBe(400)
+		}
+		expect((await (await admin("GET", "/admin/players")).json()).open).toHaveLength(1)
+	})
+})
+
+describe("removal survives a corrupt board", () => {
+	// clearEntries writes each game's board as it goes, so a bad one throws
+	// partway. De-registering first means the player cannot post anything more
+	// while that is being sorted out — the reason the order was swapped back once
+	// removal started leaving a tombstone instead of a hole.
+	it("de-registers the player even when clearing their scores fails", async () => {
+		await join("troll", "4242")
+		await postAs("troll", "4242", 20000)
+		env.SCORES.m.set("wk:fish:" + WEEK, { value: JSON.stringify({ v: 9, junk: true }), expiresAt: null })
+
+		const r = await admin("POST", "/admin/player/remove", { player: "troll", week: WEEK })
+		expect(r.status).toBe(500)
+		// but they are already off the registry and can no longer post
+		expect((await postAs("troll", "4242", 30000)).status).toBe(403)
+		expect((await join("troll", "4242")).status).toBe(403)
 	})
 })

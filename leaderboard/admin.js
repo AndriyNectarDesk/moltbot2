@@ -37,8 +37,8 @@ const when = (ms) =>
  * Deciding it by "not family" rather than "in the open list" is what makes that
  * second case show up rather than pass as a kid.
  */
-const namer = (family) => (id) =>
-	family.has(id) ? esc(id) : `${esc(id)} <span class="visitor">visitor</span>`
+const namer = (family, unmarked) => (id) =>
+	unmarked || family.has(id) ? esc(id) : `${esc(id)} <span class="visitor">visitor</span>`
 
 function gameTable(gameId, info, who) {
 	const rows = info.places
@@ -86,6 +86,20 @@ function gameTable(gameId, info, who) {
  * view — the only way to get a stranger off the standings before you close.
  */
 function playersSection(players) {
+	if (players.rosterError) {
+		return `
+	<section>
+		<h2>Players</h2>
+		<p class="warn">
+			The <code>PLAYERS</code> secret is not a map of lowercase player ids, so the worker cannot
+			tell family from visitors and is refusing every score and signup with a 500. Nothing above is
+			marked, because nothing here knows which names are your kids'. Fix it with
+			<code>wrangler secret put PLAYERS</code> — the keys must be exactly the ids, e.g.
+			<code>danylo</code>, not <code>Danylo</code>.
+		</p>
+	</section>`
+	}
+
 	if (players.error) {
 		return `
 	<section>
@@ -148,7 +162,9 @@ function playersSection(players) {
 }
 
 export function renderAdmin({ week, proposal, closed, closedAt, ended, payouts, players }) {
-	const who = namer(new Set(players.family))
+	// With the roster unreadable nothing can be told from anything, so no name is
+	// marked rather than every name being marked wrongly.
+	const who = namer(new Set(players.family), players.unmarked)
 
 	const jointRows = proposal.joint
 		.map(

@@ -270,6 +270,40 @@ describe("the run in hand is never stranded", () => {
 		expect(game._submitted).toBe(false)
 	})
 
+	// Re-arming mid-flight is the price of the fix above: the button comes back to
+	// life while the first submission is still in the air. The run must not then be
+	// saved twice under two different names.
+	it("does not let the re-armed button duplicate the run locally", async () => {
+		let release
+		globalThis.fetch = vi.fn().mockImplementation(
+			() =>
+				new Promise((resolve) => {
+					release = () => resolve({ ok: true, status: 200, json: async () => ({ ok: true, player: "zoe" }) })
+				}),
+		)
+		bind()
+		board.setName("danylo")
+		board.setPin("1111")
+
+		// What each game's submit handler does, in the order it does it.
+		const submit = async () => {
+			game._submitted = true
+			dom.submit.disabled = true
+			const alreadySaved = game._localSaved
+			game._localSaved = true
+			return board.submit({ score: 12345, stats: {}, skipLocal: alreadySaved })
+		}
+
+		const first = submit()
+		chipNamed("MIKE").click() // identity changes mid-flight, re-arming the button
+		expect(dom.submit.disabled).toBe(false)
+		const second = submit()
+
+		release()
+		await Promise.all([first, second])
+		expect(board.localEntries()).toHaveLength(1)
+	})
+
 	// The two tests above drive `gameOnChange` in this file, which is a COPY of
 	// what the games pass. That copy passing proves nothing about the games — so
 	// check the three real ones say it too. Triplicated wiring is exactly where
@@ -288,6 +322,15 @@ describe("the run in hand is never stranded", () => {
 			expect(onChange, `${game} onChange`).toMatch(/this\._submitted = false/)
 			expect(onChange, `${game} onChange`).toMatch(/submitBtn\.disabled = false/)
 			expect(onChange, `${game} onChange`).toMatch(/hasIdentity \? "POST SCORE" : "SAVE HERE"/)
+
+			// And the other half of the same fix: because onChange re-arms the button
+			// mid-flight, the local save has to be claimed BEFORE the await, or the
+			// second click appends a duplicate row under the new name.
+			const handler = src.slice(src.indexOf("submitBtn.onclick"))
+			const claim = handler.indexOf("this._localSaved = true")
+			const awaited = handler.indexOf("await this.board.submit(")
+			expect(claim, `${game} claims _localSaved`).toBeGreaterThan(-1)
+			expect(claim, `${game} claims _localSaved before awaiting`).toBeLessThan(awaited)
 		}
 	})
 })

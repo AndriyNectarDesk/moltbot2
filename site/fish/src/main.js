@@ -286,6 +286,14 @@ class Game {
 			msg.classList.remove("warn")
 			msg.textContent = ""
 
+			// Claimed before the await, not after. Changing who is playing re-arms
+			// this button on purpose (a guest who saved and then signed up must be
+			// able to post that run), and that can happen while a submission is
+			// still in flight — so the second click has to already know the run is
+			// on the local table, or it appends a duplicate under the new name.
+			const alreadySaved = this._localSaved
+			this._localSaved = true
+
 			const res = await this.board.submit({
 				score: this.score,
 				stats: {
@@ -296,9 +304,8 @@ class Game {
 					flow: Math.round(this.bestFlow * 10),
 				},
 				durationMs: RUN_SECONDS * 1000,
-				skipLocal: this._localSaved,
+				skipLocal: alreadySaved,
 			})
-			this._localSaved = true
 
 			this._renderBoard($("go-board"), res.entries.slice(0, 8), {
 				shared: res.shared,
