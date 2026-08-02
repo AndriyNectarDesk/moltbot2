@@ -98,6 +98,20 @@ describe("nothing can stick", () => {
 		expect(touch.state.throttle).toBe(0)
 	})
 
+	// The inverse hazard: two fingers on ONE pedal, and the first to lift must
+	// not release it under the finger still pressing. Fish's pointer.js counts
+	// its sources for exactly this reason.
+	it("keeps a pedal held while any finger is still on it", () => {
+		fire("tc-gas", "pointerdown", 1)
+		fire("tc-gas", "pointerdown", 2)
+		fire("tc-gas", "pointerup", 1)
+		expect(touch.state.throttle).toBe(1)
+		expect(document.getElementById("tc-gas").classList.contains("held")).toBe(true)
+		fire("tc-gas", "pointerup", 2)
+		expect(touch.state.throttle).toBe(0)
+		expect(document.getElementById("tc-gas").classList.contains("held")).toBe(false)
+	})
+
 	it("releases everything when the window blurs, like the keyboard does", () => {
 		fire("tc-gas", "pointerdown", 1)
 		fire("tc-drift", "pointerdown", 2)

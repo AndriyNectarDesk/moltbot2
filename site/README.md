@@ -59,11 +59,14 @@ game's copies against Nova's:
   and there are now three real consumers to shape that around instead of one real
   and one imagined.
 - **`touch.js` — not reused at all.** Fishing needs one contextual button, not a
-  stick and five action keys. Finding out a module *shouldn't* be shared is a
-  successful result, not a failure.
+  stick and five action keys, and the city ended up with its own pedal buttons
+  (`city/src/touch.js`) rather than nova's stick — three games, three different
+  touch schemes. Finding out a module *shouldn't* be shared is a successful
+  result, not a failure.
 - **`shared/input.js` — reused unmodified by the city, and not at all by fishing.**
-  The city is keyboard-driven and that module's pointer-lock machinery is all on
-  the mouse path, so its keyboard half worked untouched. Fishing needed an absolute
+  The city drives from the keyboard (touch pedals merge in beside it) and that
+  module's pointer-lock machinery is all on the mouse path, so its keyboard half
+  worked untouched. Fishing needed an absolute
   position on the water and never grabs the cursor, so it has its own small
   `pointer.js`. Two consumers wanting opposite things from one module is exactly
   the seam that shouldn't be invented.
@@ -160,6 +163,16 @@ a reload and unlock cars in the garage · R cycles NEON FM / SLOW LANE / OFF AIR
 ESC pauses · a SHIFT shows the clock, cash, streak, job card and the waypoint
 arrow · a delivery pops a cash figure and the streak climbs · the clock ends the
 shift and the screen shows five stats.
+
+**City Lights, phone:** portrait shows TURN SIDEWAYS and pauses a drive ·
+landscape shows steer arrows bottom-left, DRIFT/brake/gas bottom-right · holding
+gas drives, sliding a thumb off a pedal releases it · the pedals vanish under
+every menu and on game over · the title shows button hints instead of W A S D ·
+the pause button in the top bar still works with the pedals up.
+
+**Quiet Water, phone:** the whole game is one finger — hold to cast, tap to
+strike, hold to reel · dragging while reeling must not pull-to-refresh ·
+portrait shows TURN SIDEWAYS and pauses a run.
 
 **Quiet Water:** cast lands where the bright ring shows · the water name under
 the reticle changes over lilies, the dock shade and a rising ring · the float taps

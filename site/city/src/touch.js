@@ -43,9 +43,13 @@ function capture(el, id) {
 export class CityTouch {
 	constructor() {
 		this.enabled = false
-		// One entry per button currently held, keyed by element id. Levels, not
-		// edges: the game polls this every frame the same way it polls the key set.
-		this._held = new Set()
+		// Button id → the set of pointers currently holding it. Levels, not edges:
+		// the game polls this every frame the same way it polls the key set.
+		// Counted per pointer for the same reason fish's pointer.js counts its
+		// sources: with a plain flag, a second finger grazing GAS and lifting
+		// would release the pedal under the finger still pressing it — which
+		// mid-shift reads as the game ignoring the button.
+		this._held = new Map()
 	}
 
 	/** Coarse pointer + no hover is the reliable "this is a touchscreen" test. */
@@ -58,11 +62,11 @@ export class CityTouch {
 
 	/** What the held buttons add up to. Shape matches what `car.update` takes. */
 	get state() {
-		const h = this._held
+		const down = (id) => (this._held.get(id)?.size ?? 0) > 0
 		return {
-			throttle: (h.has("tc-gas") ? 1 : 0) - (h.has("tc-brake") ? 1 : 0),
-			steer: (h.has("tc-right") ? 1 : 0) - (h.has("tc-left") ? 1 : 0),
-			handbrake: h.has("tc-drift"),
+			throttle: (down("tc-gas") ? 1 : 0) - (down("tc-brake") ? 1 : 0),
+			steer: (down("tc-right") ? 1 : 0) - (down("tc-left") ? 1 : 0),
+			handbrake: down("tc-drift"),
 		}
 	}
 
@@ -86,18 +90,24 @@ export class CityTouch {
 			e.stopPropagation()
 			el.classList.add("held")
 			capture(el, e.pointerId)
-			this._held.add(id)
+			let holders = this._held.get(id)
+			if (!holders) this._held.set(id, (holders = new Set()))
+			holders.add(e.pointerId)
 		}
 		const release = (e) => {
 			e.stopPropagation()
-			el.classList.remove("held")
-			this._held.delete(id)
+			const holders = this._held.get(id)
+			holders?.delete(e.pointerId)
+			// Only when the last finger leaves — a second finger grazing the pedal
+			// and lifting must not release it under the one still pressing.
+			if (!holders || holders.size === 0) el.classList.remove("held")
 		}
 		el.addEventListener("pointerdown", press)
 		el.addEventListener("pointerup", release)
-		// cancel and leave both release: a finger sliding off a pedal, or the
-		// browser stealing the gesture, must not leave the car driving itself —
-		// the stuck pedal is the single worst failure mode on a phone.
+		// With pointer capture held, a finger sliding off never fires leave —
+		// events stay retargeted at the button until pointerup or pointercancel,
+		// which is what actually guarantees a pedal can't stick. The leave
+		// listener is belt-and-braces for the no-capture fallback in `capture()`.
 		el.addEventListener("pointercancel", release)
 		el.addEventListener("pointerleave", release)
 	}

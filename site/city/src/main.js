@@ -9,9 +9,11 @@
 // SHIFT is the contest: five minutes of chained deliveries, and the only mode
 // that scores. You opt into it from the pause menu or with Enter.
 //
-// Keyboard-driven, and it reuses ../../shared/input.js as-is — that module's
+// Keyboard-driven, reusing ../../shared/input.js as-is — that module's
 // pointer-lock machinery is all on the mouse path, so the keyboard half works
-// untouched. This is the first genuine reuse of it outside the shooter.
+// untouched. This is the first genuine reuse of it outside the shooter. On a
+// touchscreen, ./touch.js adds hold-buttons that merge into the same control
+// set; the physics never learns which one is driving.
 
 import * as THREE from "three"
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js"
