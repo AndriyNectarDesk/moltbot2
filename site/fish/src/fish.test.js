@@ -376,10 +376,12 @@ describe("the bite, played by a human", () => {
 		return b.canHook
 	}
 
-	it("lets a first-timer hook the common fish", () => {
+	it("lets a first-timer hook every species", () => {
 		// ~350ms: sees the float go under, taps. First run of the game, phone in
-		// hand. The common species must not be a reflex bar.
-		for (const id of ["sunfish", "perch", "bass"]) {
+		// hand. NO species may be a reflex bar — the rare fish are the ones the
+		// README tells players to hunt, so a retune that quietly dropped only
+		// pike back to 300ms would be worse than one that dropped sunfish.
+		for (const id of SPECIES_IDS) {
 			let hooked = 0
 			for (let i = 0; i < 1000; i++) if (hooks(id, latency(0.35, 0.06))) hooked++
 			expect(hooked / 1000, id).toBeGreaterThan(0.9)
@@ -392,6 +394,10 @@ describe("the bite, played by a human", () => {
 		// un-missable.
 		for (const id of SPECIES_IDS) {
 			expect(hooks(id, 0.9), id).toBe(false)
+			// The strike above only misses because every window is under 900ms;
+			// assert that directly, or a window AT exactly 900 would pass on
+			// float-equality luck and anything between 781-899 unnoticed.
+			expect(SPECIES[id].tell.windowMs, id).toBeLessThan(900)
 		}
 	})
 

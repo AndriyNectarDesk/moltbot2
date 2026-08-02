@@ -738,7 +738,10 @@ class Game {
 
 				if (p.pressed) {
 					if (bite.canHook) this._hook()
-					else this._spook("early")
+					// A strike after the window closes is LATE — telling that player
+					// "TOO SOON" coaches them to wait even longer, the exact inversion
+					// of the correction they need.
+					else this._spook(bite.phase === "gone" ? "late" : "early")
 					break
 				}
 				if (bite.expired) {
