@@ -23,6 +23,7 @@ import { clamp, damp, lerp } from "../../shared/util.js"
 import { Leaderboard } from "../../shared/leaderboard.js"
 import { bindIdentity } from "../../shared/identity.js"
 import { Input } from "../../shared/input.js"
+import { CityTouch, mergeControls } from "./touch.js"
 import { Audio } from "./audio.js"
 import { BLOCK, CITY_HALF, City } from "./city.js"
 import { CARS, CAR_IDS, Car } from "./car.js"
@@ -63,6 +64,14 @@ class Game {
 
 		this.audio = new Audio()
 		this.input = new Input(this.canvas)
+		this.touch = new CityTouch()
+		this.isTouch = CityTouch.isTouchDevice()
+		if (this.isTouch) {
+			this.touch.attach()
+			// Activates the shared touch CSS: swaps the keyboard hints for button
+			// hints on the title screen and kills pull-to-refresh.
+			document.body.classList.add("touch")
+		}
 		this.hud = new HUD()
 		this.board = new Leaderboard("city")
 
@@ -281,8 +290,11 @@ class Game {
 		})
 
 		const checkOrientation = () => {
-			const touch = matchMedia("(hover: none) and (pointer: coarse)").matches
-			$("rotate").classList.toggle("hidden", !(touch && innerHeight > innerWidth))
+			const portrait = this.isTouch && innerHeight > innerWidth
+			$("rotate").classList.toggle("hidden", !portrait)
+			// Same rule as the fishing game: portrait mid-drive pauses rather than
+			// letting the run burn behind the TURN SIDEWAYS screen.
+			if (portrait && (this.state === "roam" || this.state === "shift")) this.pause()
 		}
 		addEventListener("resize", checkOrientation)
 		addEventListener("orientationchange", () => setTimeout(checkOrientation, 250))
@@ -434,6 +446,11 @@ class Game {
 		for (const id of ["title", "pause", "gameover"]) {
 			$(id).classList.toggle("hidden", id !== show)
 		}
+		// The pedals live and die here, not in the six transitions that call this
+		// — every one of them sets `state` before calling, so this one line is the
+		// whole lifecycle. Hiding also releases: a pedal held when the shift clock
+		// hits zero must not keep feeding the car under the game-over screen.
+		this.touch.setVisible(this.isTouch && show === null && (this.state === "roam" || this.state === "shift"))
 	}
 
 	_placeCar() {
@@ -446,7 +463,16 @@ class Game {
 		this._prevGround = 0
 	}
 
+	_enterMobileDrive() {
+		if (!this.isTouch) return
+		// Best effort, exactly as nova ships it: works on Android (and hides the
+		// address bar), silently no-ops on iOS. Portrait-pause is the guarantee.
+		document.documentElement.requestFullscreen?.().catch(() => {})
+		screen.orientation?.lock?.("landscape").catch(() => {})
+	}
+
 	startRoam() {
+		this._enterMobileDrive()
 		this.audio.init()
 		this.audio.resume()
 		this.audio.setEnabled(this.options.audio)
@@ -462,6 +488,7 @@ class Game {
 	}
 
 	startShift() {
+		this._enterMobileDrive()
 		this.audio.init()
 		this.audio.resume()
 		this.audio.setEnabled(this.options.audio)
@@ -562,7 +589,7 @@ class Game {
 		if (i.down("KeyS") || i.down("ArrowDown")) throttle -= 1
 		if (i.down("KeyA") || i.down("ArrowLeft")) steer -= 1
 		if (i.down("KeyD") || i.down("ArrowRight")) steer += 1
-		return { throttle, steer, handbrake: i.down("Space") }
+		return mergeControls({ throttle, steer, handbrake: i.down("Space") }, this.touch.state)
 	}
 
 	_driveCar(dt) {
