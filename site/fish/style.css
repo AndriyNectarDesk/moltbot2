@@ -608,3 +608,9 @@ body {
 		font-size: 24px;
 	}
 }
+
+/* The browser must not claim canvas gestures for scrolling or zooming —
+   pointer.js preventDefaults them, but only once it has seen the event. */
+#scene {
+	touch-action: none;
+}

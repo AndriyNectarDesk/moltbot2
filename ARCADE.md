@@ -26,7 +26,7 @@ leaderboard/          the Cloudflare Worker — see leaderboard/README.md
 ```
 
 Run everything locally with `npm run site` (→ http://127.0.0.1:5180/). Tests are
-`npm test` — **490** of them, and they run in CI on every push and PR.
+`npm test` — **505** of them, and they run in CI on every push and PR.
 
 ---
 
@@ -240,7 +240,7 @@ can be judged rather than argued about.
 | `fx.js` | **byte-identical in all three** (md5 confirmed). Just move it into `shared/`. |
 | `audio.js` | synth primitives identical three times; the sound bank and music are wholly new each time. Split into an engine plus a per-game bank. |
 | `quality.js` | the adaptive scaler identical three times; only `apply()` and the per-preset scene flags differ. Wants an injected `onApply(preset)` plus a per-game extras bag. |
-| `touch.js` | never reused. Fishing wants one contextual button, the city wants a keyboard. |
+| `touch.js` | never reused, and rightly: all three ended up with different touch schemes. Nova has its stick and action buttons, fishing folds touch into its one-button `pointer.js`, and the city grew its own pedal buttons (`city/src/touch.js`) — digital, because the car was tuned against ±1 keyboard input. |
 | `shared/input.js` | reused unmodified by the city (keyboard only), not at all by fishing (which needs an absolute pointer and no lock). **Do not share input** — the three games want opposite things. |
 | `shared/identity.js` | shared from the start, and the exception that proves the rule: identity is one fact across the arcade, so three copies would be three chances for the three games to disagree about who you are. |
 

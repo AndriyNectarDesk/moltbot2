@@ -615,3 +615,90 @@ body {
 		font-size: 28px;
 	}
 }
+
+/* ============================================================
+   TOUCH DRIVING CONTROLS
+   ============================================================
+   Layered between the HUD (10) and the screens (30), so a menu always sits
+   on top of the pedals. The root ignores pointers entirely — only the
+   buttons are targets — so the pause button in the top bar stays tappable,
+   which is the tap-shadowing trap nova's full-height drag zones fell into. */
+#touch {
+	position: absolute;
+	inset: 0;
+	z-index: 20;
+	pointer-events: none;
+}
+
+/* The browser must not claim these gestures for scrolling or zooming. */
+#scene,
+#touch button {
+	touch-action: none;
+}
+
+#tc-steer,
+#tc-pedals {
+	position: absolute;
+	bottom: calc(18px + env(safe-area-inset-bottom));
+	display: flex;
+	gap: 14px;
+	align-items: flex-end;
+}
+
+#tc-steer {
+	left: calc(18px + env(safe-area-inset-left));
+}
+
+#tc-pedals {
+	right: calc(18px + env(safe-area-inset-right));
+}
+
+#touch button {
+	pointer-events: auto;
+	width: 76px;
+	height: 76px;
+	margin: 0;
+	padding: 0;
+	font-family: inherit;
+	font-size: 22px;
+	font-weight: 700;
+	letter-spacing: 1px;
+	color: rgba(255, 255, 255, 0.85);
+	background: rgba(10, 6, 22, 0.45);
+	border: 1px solid rgba(255, 255, 255, 0.3);
+	border-radius: 12px;
+	box-shadow: none;
+	-webkit-user-select: none;
+	user-select: none;
+	-webkit-tap-highlight-color: transparent;
+}
+
+#touch button:hover {
+	transform: none;
+	filter: none;
+	box-shadow: none;
+}
+
+#touch button.held {
+	background: rgba(49, 230, 255, 0.25);
+	border-color: var(--cyan);
+	color: #fff;
+}
+
+/* The drift button reads as a word, not a glyph, and sits apart from the
+   pedals so a thumb going for GAS can't graze it. */
+#tc-drift {
+	font-size: 13px;
+	letter-spacing: 2px;
+	width: 64px;
+	height: 64px;
+	margin-right: 10px;
+	color: var(--orange-hot);
+	border-color: rgba(255, 122, 26, 0.45);
+}
+
+#tc-drift.held {
+	background: rgba(255, 122, 26, 0.3);
+	border-color: var(--orange);
+	color: #fff;
+}

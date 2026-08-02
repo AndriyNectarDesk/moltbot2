@@ -41,9 +41,12 @@ menu, or by pressing Enter while roaming.
 | **ESC** | pause |
 | **ENTER** | clock on for a shift (while roaming) |
 
-Keyboard only. There are no touch controls — this one genuinely wants a laptop,
-and pretending otherwise with four thumb buttons would have been worse than
-saying so.
+On a touchscreen the same controls appear as hold-buttons: steer arrows on the
+left, gas/brake pedals and DRIFT on the right (`src/touch.js`). They are
+deliberately digital — the physics has only ever been fed ±1 from the keyboard,
+so buttons reproduce the shipped feel exactly, where a stick would put analog
+values into a path that has never seen one. Changing the radio station has no
+touch control, on purpose; the radio still plays.
 
 ## Driving
 
@@ -144,7 +147,8 @@ the keyboard half works untouched. That's the first genuine reuse of it outside
 the shooter, and it's written up in [`../README.md`](../README.md).
 
 **Cut from v1, deliberately:** pedestrians, traffic, car damage, interiors, a map
-screen, photo mode, and touch controls.
+screen, and photo mode. Touch controls were on this list and were added later —
+as buttons, not a stick, for the reason above.
 
 **Still worth doing with Sofia in front of it.** The numbers say the car is
 predictable and the three variants are distinct, but only she can say whether

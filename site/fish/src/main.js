@@ -58,6 +58,10 @@ class Game {
 
 		this.audio = new Audio()
 		this.pointer = new Pointer(this.canvas)
+		// The input scheme is already touch-native; this just switches on the
+		// shared touch CSS (overscroll-behavior none, so a reeling drag can't
+		// trigger pull-to-refresh).
+		if (this.pointer.isTouch) document.body.classList.add("touch")
 		this.hud = new HUD()
 		this.board = new Leaderboard("fish")
 

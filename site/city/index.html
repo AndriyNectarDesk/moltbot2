@@ -88,6 +88,21 @@
 				</div>
 			</div>
 
+			<!-- Touch driving controls. Shown by main.js only on a touchscreen and
+			     only while actually driving; the root ignores pointers so the HUD
+			     stays reachable, and only the buttons themselves are targets. -->
+			<div id="touch" class="hidden">
+				<div id="tc-steer">
+					<button id="tc-left" aria-label="Steer left">&#9664;</button>
+					<button id="tc-right" aria-label="Steer right">&#9654;</button>
+				</div>
+				<div id="tc-pedals">
+					<button id="tc-drift" aria-label="Handbrake">DRIFT</button>
+					<button id="tc-brake" aria-label="Brake / reverse">&#9660;</button>
+					<button id="tc-gas" aria-label="Accelerate">&#9650;</button>
+				</div>
+			</div>
+
 			<!-- ============ SCREENS ============ -->
 			<div id="title" class="screen">
 				<div class="t-inner">
@@ -108,11 +123,17 @@
 						one that goes on the prize board.
 					</p>
 
-					<div class="t-keys">
+					<div class="t-keys desktop-only">
 						<div><b>W A S D</b> drive</div>
 						<div><b>SPACE</b> handbrake</div>
 						<div><b>R</b> change station</div>
 						<div><b>ESC</b> pause</div>
+					</div>
+					<div class="t-keys touch-only">
+						<div><b>&#9664; &#9654;</b> steer</div>
+						<div><b>&#9650; &#9660;</b> gas and brake</div>
+						<div><b>DRIFT</b> handbrake</div>
+						<div><b>II</b> pause</div>
 					</div>
 
 					<div class="garage-wrap">
@@ -127,7 +148,7 @@
 					</div>
 
 					<div id="title-board" class="board board-compact"></div>
-					<div class="t-foot">Best on a laptop or desktop with a keyboard.</div>
+					<div class="t-foot desktop-only">Best on a laptop or desktop with a keyboard.</div>
 				</div>
 			</div>
 
@@ -205,10 +226,7 @@
 			<div id="rotate" class="screen hidden">
 				<div class="t-inner">
 					<h2>TURN SIDEWAYS</h2>
-					<p class="t-sub">
-						Turning sideways will help, but honestly this one needs a keyboard —
-						there are no touch controls. Try it on a laptop.
-					</p>
+					<p class="t-sub">The city needs a wider view. Rotate your device to landscape.</p>
 				</div>
 			</div>
 
