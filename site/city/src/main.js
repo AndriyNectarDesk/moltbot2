@@ -26,7 +26,7 @@ import { Leaderboard } from "../../shared/leaderboard.js"
 import { bindIdentity } from "../../shared/identity.js"
 import { Input } from "../../shared/input.js"
 import { CityTouch, mergeControls } from "./touch.js"
-import { Audio } from "./audio.js"
+import { Audio, skidLevel } from "./audio.js"
 import { BLOCK, CITY_HALF, City } from "./city.js"
 import { CARS, CAR_IDS, Car } from "./car.js"
 import { buildCarMesh } from "./carmesh.js"
@@ -514,6 +514,10 @@ class Game {
 		this.state = "paused"
 		this._screens("pause")
 		this.audio.stopMusic()
+		// The watchdog would silence it anyway, but a 250ms screech tail behind
+		// the pause menu is the one place it would be audible — Escape mid-drift
+		// is Sofia's most common input.
+		this.audio.setSkid(0, 0)
 		$("btn-shift-now").classList.toggle("hidden", this._wasState === "shift")
 	}
 
@@ -819,6 +823,7 @@ class Game {
 				this.car.airborne,
 			)
 			this.audio.setIntensity(this.car.speedFrac)
+			this.audio.setSkid(skidLevel(this.car.slipAmount, this.car.airborne), this.car.speedFrac)
 		} else if (this.state === "menu") {
 			// Slow orbit over the city behind the menu.
 			const a = this.time * 0.07

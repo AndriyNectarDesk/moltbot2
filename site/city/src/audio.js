@@ -9,6 +9,25 @@
 // a city feel like a place you're driving through rather than a level.
 
 import { clamp, rand } from "../../shared/util.js"
+import { DRIFT_AT } from "./car.js"
+
+/**
+ * How loud the tyres should be, 0..1, from how far sideways the car slides.
+ *
+ * Pure and exported so the mapping is testable without an AudioContext.
+ *
+ * The onset sits at 0.8 x DRIFT_AT — BELOW the threshold where the smoke and
+ * the HUD light fire — on purpose: at the visual threshold the level is only
+ * ~8%, a quiet pre-squeal that swells into the slide. Tyres chirp before they
+ * let go, and for the drifter that chirp is an audible warning you are at the
+ * edge before you are over it. The LOUD region is coherent with the visuals;
+ * a hard shared threshold would make the sound switch on and off at the
+ * boundary instead.
+ */
+export function skidLevel(slipAmount, airborne) {
+	if (airborne) return 0
+	return clamp((slipAmount - DRIFT_AT * 0.8) / 6, 0, 1)
+}
 
 export class Audio {
 	constructor() {
@@ -123,6 +142,51 @@ export class Audio {
 
 	// ---------------------------------------------------------------- SFX
 	// ------------------------------------------------------------ the city
+
+	/**
+	 * The tyre screech, driven per frame while driving (like setIntensity).
+	 *
+	 * One persistent voice — looped noise through a bandpass — created on first
+	 * use and left running at zero gain, which is strictly simpler than a
+	 * start/stop lifecycle and matches the radio's persistent scheduler.
+	 *
+	 * Silence is the DEFAULT: every call schedules a fade-out 250ms in the
+	 * future, and the next frame's call cancels it. If frames stop arriving for
+	 * any reason — pause, game over, a hidden tab in roam where nothing changes
+	 * state — the screech dies on its own within half a second. 250ms rather
+	 * than something tighter because this game runs on thermally-throttled
+	 * phones where 100-200ms frame gaps are real, and a tighter watchdog would
+	 * flutter exactly when the phone is struggling.
+	 */
+	setSkid(level, speedFrac = 0) {
+		if (!this._ready()) return
+		if (!this._skid) {
+			const src = this.ctx.createBufferSource()
+			src.buffer = this.noiseBuffer
+			src.loop = true
+			const filt = this.ctx.createBiquadFilter()
+			filt.type = "bandpass"
+			filt.frequency.value = 900
+			filt.Q.value = 1.1
+			const g = this.ctx.createGain()
+			g.gain.value = 0.0001
+			src.connect(filt)
+			filt.connect(g)
+			g.connect(this.sfxGain)
+			src.start()
+			this._skid = { g, filt }
+		}
+		const t = this.t
+		const gain = this._skid.g.gain
+		gain.cancelScheduledValues(t)
+		// Fast in, slower out — a screech that lags its slide reads as broken.
+		gain.setTargetAtTime(level * 0.14, t, level > 0 ? 0.03 : 0.1)
+		gain.setTargetAtTime(0, t + 0.25, 0.1)
+		const freq = this._skid.filt.frequency
+		freq.cancelScheduledValues(t)
+		// Brightens with speed: a motorway slide screams, a car-park one squeals.
+		freq.setTargetAtTime(600 + speedFrac * 1400, t, 0.05)
+	}
 
 	/** Something solid, at a volume set by how hard you hit it. */
 	crash(force = 0.5) {
