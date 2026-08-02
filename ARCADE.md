@@ -26,7 +26,7 @@ leaderboard/          the Cloudflare Worker — see leaderboard/README.md
 ```
 
 Run everything locally with `npm run site` (→ http://127.0.0.1:5180/). Tests are
-`npm test` — **505** of them, and they run in CI on every push and PR.
+`npm test` — **509** of them, and they run in CI on every push and PR.
 
 ---
 
@@ -268,11 +268,16 @@ prize the tiebreaks had already decided; the car's steering being inverted; the
 delivery waypoint pointing the wrong way at every heading but two; and a GPU leak
 that would have degraded a session gradually and been blamed on the water.
 
-**Simulate before trusting a difficulty curve.** Both games with a skill ceiling
-have their rules in a file that imports no three.js, precisely so play can be
-simulated: `site/fish/src/fish.js` and `site/city/src/car.js`. The fishing fight
-and the delivery scoring were both tuned against measured numbers, and in both
-cases the first version was wrong in a way that eyeballing would not have caught.
+**Simulate before trusting a difficulty curve — with a HUMAN in the sim.** Both
+games with a skill ceiling have their rules in a file that imports no three.js,
+precisely so play can be simulated: `site/fish/src/fish.js` and
+`site/city/src/car.js`. The fishing fight and the delivery scoring were both
+tuned against measured numbers, and in both cases the first version was wrong in
+a way that eyeballing would not have caught. The bite taught the sharper lesson:
+it WAS simulated — by a zero-latency policy — and certified 300-480ms hook
+windows that the first human to ever play the game could not pass. A simulation
+without reaction time in it certifies a player who does not exist; the
+human-latency bite test in `fish.test.js` is the guard.
 
 **Watch for tests that pass for the wrong reason.** Three separate times a test
 was asserting something vacuous or measuring the wrong thing while looking

@@ -469,6 +469,7 @@ class Game {
 		this.phase = "idle"
 		this.bite = null
 		this._warned = false
+		this._took = false
 		this.rod.reelIn()
 		this.hud.hidePower()
 		this.hud.hidePrompt()
@@ -561,6 +562,7 @@ class Game {
 		const grams = rollGrams(id, this._spotQuality)
 		this.bite = new Bite(id, grams, this._spotQuality)
 		this.phase = "tell"
+		this._took = false
 		this.audio.nibble(SPECIES[id].tell.sink)
 	}
 
@@ -723,8 +725,16 @@ class Game {
 				const bite = this.bite
 				bite.update(dt)
 				this.rod.sink = bite.bobberSink()
-				if (bite.phase === "window") this.hud.prompt("NOW — SET THE HOOK", "")
-				else this.hud.prompt("WAIT FOR IT", "")
+				if (bite.phase === "window") {
+					// One cue the moment it takes, not one per frame — same shape as
+					// the fight's _warned. The float going under is a few pixels on a
+					// phone; this is the sound that carries the strike moment.
+					if (!this._took) {
+						this._took = true
+						this.audio.take()
+					}
+					this.hud.prompt("NOW — SET THE HOOK", "")
+				} else this.hud.prompt("WAIT FOR IT", "")
 
 				if (p.pressed) {
 					if (bite.canHook) this._hook()

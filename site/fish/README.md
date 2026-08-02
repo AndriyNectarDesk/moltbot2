@@ -90,7 +90,10 @@ shape of a run: greed costs you the multiplier, not just the fish.
 
 One pike is worth more than a bucket of sunfish, so hunting the rare fish over
 good water beats farming the easy bite in open water. A measured attentive run
-scores roughly 10,000–15,000 over 14–16 fish.
+scored roughly 10,000–15,000 over 14–16 fish under the original bite windows;
+the windows were widened for human reactions after the first real playtest, so
+expect real runs to land somewhat more than that, and re-measure before leaning
+on the number.
 
 ## Leaderboard
 

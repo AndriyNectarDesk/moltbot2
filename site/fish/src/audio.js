@@ -144,6 +144,21 @@ export class Audio {
 		this._tone({ type: "triangle", freq: f, to: f * 0.7, dur: 0.1, gain: 0.1 })
 	}
 
+	/**
+	 * The take — the moment the float goes under and the strike window opens.
+	 * This is the ONE moment the whole bite funnel turns on, and it used to be
+	 * silent: nibble plays when the taps start, hook after a successful strike,
+	 * and nothing marked the instant between. On a phone the float is a few
+	 * pixels, so ears have to be able to carry this. A single low gulp, clearly
+	 * not nibble's tick and quieter than hook, which stays the game's one sharp
+	 * sound.
+	 */
+	take() {
+		if (!this._ready()) return
+		this._tone({ type: "sine", freq: 400, to: 150, dur: 0.18, gain: 0.12 })
+		this._noise({ dur: 0.14, gain: 0.05, type: "lowpass", freq: 900, to: 300 })
+	}
+
 	/** Setting the hook: the one sharp sound in the game, because it earned it. */
 	hook() {
 		if (!this._ready()) return

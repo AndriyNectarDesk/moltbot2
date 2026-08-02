@@ -341,3 +341,72 @@ describe("scoring", () => {
 		expect(best / good).toBeGreaterThan(2)
 	})
 })
+
+// ---------------------------------------------------------------- the bite, played by a human
+//
+// This suite exists because the bite was certified by a zero-latency sim and
+// then failed its first human: the windows were 300-480ms, a first-time player
+// needs ~350ms to see the float commit and tap, and sunfish+perch — 83% of
+// open-water bites — were near-impossible to hook. The fight got a
+// "punishes a thermostat" test after its own version of this mistake; this is
+// the bite's equivalent. If a retune ever drops the windows back into reflex
+// territory, this fails before a kid does.
+describe("the bite, played by a human", () => {
+	// Deterministic, so a failure is reproducible — same LCG as collide.test.js.
+	let seed = 424242
+	const rnd = () => {
+		seed = (seed * 1103515245 + 12345) & 0x7fffffff
+		return seed / 0x7fffffff
+	}
+
+	/**
+	 * Reaction latency: mean + spread·(sum of three uniforms − 1.5).
+	 *
+	 * The SAME model the diagnosis sim used, constants included, so this test
+	 * describes the human who actually failed rather than a cleaner one who
+	 * would have passed the old windows. Note the effective sd is spread/2
+	 * (≈30ms at spread 0.06) — a player of consistent speed, not a twitchy one.
+	 */
+	const latency = (mean, spread) => mean + spread * (rnd() + rnd() + rnd() - 1.5)
+
+	/** Does a strike at commit+L land inside the species' window? */
+	const hooks = (id, L) => {
+		const b = new Bite(id, 500, 0)
+		b.update(b.commitAt + Math.max(0, L))
+		return b.canHook
+	}
+
+	it("lets a first-timer hook the common fish", () => {
+		// ~350ms: sees the float go under, taps. First run of the game, phone in
+		// hand. The common species must not be a reflex bar.
+		for (const id of ["sunfish", "perch", "bass"]) {
+			let hooked = 0
+			for (let i = 0; i < 1000; i++) if (hooks(id, latency(0.35, 0.06))) hooked++
+			expect(hooked / 1000, id).toBeGreaterThan(0.9)
+		}
+	})
+
+	it("still misses when genuinely asleep at the rod", () => {
+		// Deterministic, every species: the largest window is 780ms, so a strike
+		// 900ms after the take must always be late. The window got wider, not
+		// un-missable.
+		for (const id of SPECIES_IDS) {
+			expect(hooks(id, 0.9), id).toBe(false)
+		}
+	})
+
+	it("makes a distracted player miss the quick fish more often than not", () => {
+		// ~600ms: looking at the scenery. The gate still exists for the species
+		// that are supposed to be quick.
+		let hooked = 0
+		for (let i = 0; i < 1000; i++) if (hooks("sunfish", latency(0.6, 0.06))) hooked++
+		expect(hooked / 1000).toBeLessThan(0.4)
+	})
+
+	it("still spooks an early strike — the actual skill is untouched", () => {
+		const b = new Bite("sunfish", 200, 0)
+		b.update(b.commitAt - 0.1)
+		expect(b.phase).toBe("taps")
+		expect(b.canHook).toBe(false)
+	})
+})
