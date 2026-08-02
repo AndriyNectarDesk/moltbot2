@@ -583,6 +583,25 @@ body.touch {
 	overscroll-behavior: none;
 }
 
+/* On a phone the menu screens are taller than the viewport, and a flex-centred
+   overflowing child clips at BOTH ends unreachably — the first real phone
+   session had the score row and the play-again button cut off with no way to
+   scroll to either. `margin: auto` on the inner column is the safe-centring
+   trick: with room to spare it centres exactly as before, and once the content
+   overflows the auto margins collapse to zero, so it starts at the top and the
+   screen scrolls. */
+body.touch .screen {
+	overflow-y: auto;
+	align-items: flex-start;
+	justify-content: flex-start;
+}
+
+body.touch .screen .t-inner {
+	margin: auto;
+	padding-top: max(28px, env(safe-area-inset-top));
+	padding-bottom: max(28px, env(safe-area-inset-bottom));
+}
+
 @media (max-width: 900px), (max-height: 560px) {
 	.board {
 		max-width: 340px;
