@@ -30,6 +30,13 @@
 //  - Big fish are EASIER to hook and much harder to land. Their tells are slow
 //    and their hook window is generous; their fight is brutal. Hooking a
 //    sturgeon should feel like the start of the problem, not the reward.
+//  - Hook windows are sized for HUMAN reactions, not simulated ones. The first
+//    versions were 300-480ms, certified by a zero-latency sim, and the first
+//    human to ever play the game could not hook a fish: seeing the float go
+//    under and tapping takes a first-timer ~350ms before the window even starts
+//    counting. The skill of the bite is reading the tell and NOT striking early
+//    — it was never meant to also be a reflex bar. There is now a
+//    human-latency test that keeps it honest.
 //  - Fish tire. Fatigue weakens their pull and lengthens their rests, so a
 //    patient player is rewarded twice — they don't snap the line, and the fish
 //    they're holding gets easier. Losing patience is the mistake, not losing
@@ -59,7 +66,7 @@ export const SPECIES = {
 		w1: 6,
 		// tell: a flurry of tiny taps, then it takes it. Twitchy and easy to
 		// misread as a fish already hooked.
-		tell: { taps: 5, tapMs: 105, gapMs: 95, sink: 0.13, windowMs: 300 },
+		tell: { taps: 5, tapMs: 105, gapMs: 95, sink: 0.13, windowMs: 560 },
 		// Deliberately forgiving. This is the fish a beginner catches while still
 		// working out what the button does, so holding the reel down has to work —
 		// a sunfish that snaps teaches nothing except that the game is unfair.
@@ -88,7 +95,7 @@ export const SPECIES = {
 		belly: 0xe6d79a,
 		w0: 31,
 		w1: 17,
-		tell: { taps: 2, tapMs: 150, gapMs: 150, sink: 0.19, windowMs: 320 },
+		tell: { taps: 2, tapMs: 150, gapMs: 150, sink: 0.19, windowMs: 580 },
 		fight: {
 			pull: 0.5,
 			reelTension: 0.46,
@@ -114,7 +121,7 @@ export const SPECIES = {
 		w0: 13,
 		w1: 30,
 		// one committed thump — miss it and there is no second chance
-		tell: { taps: 1, tapMs: 260, gapMs: 120, sink: 0.26, windowMs: 340 },
+		tell: { taps: 1, tapMs: 260, gapMs: 120, sink: 0.26, windowMs: 620 },
 		fight: {
 			pull: 0.52,
 			reelTension: 0.56,
@@ -140,7 +147,7 @@ export const SPECIES = {
 		w0: 3.4,
 		w1: 30,
 		// no taps at all — the float just leans over and keeps going
-		tell: { taps: 1, tapMs: 620, gapMs: 100, sink: 0.32, windowMs: 420 },
+		tell: { taps: 1, tapMs: 620, gapMs: 100, sink: 0.32, windowMs: 700 },
 		fight: {
 			pull: 0.5,
 			reelTension: 0.64,
@@ -166,7 +173,7 @@ export const SPECIES = {
 		w0: 0.25,
 		w1: 15,
 		// the slowest tell in the lake: it sinks, and sinks, and sinks
-		tell: { taps: 1, tapMs: 900, gapMs: 120, sink: 0.4, windowMs: 480 },
+		tell: { taps: 1, tapMs: 900, gapMs: 120, sink: 0.4, windowMs: 780 },
 		fight: {
 			pull: 0.5,
 			reelTension: 0.72,
