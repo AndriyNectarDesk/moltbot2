@@ -2,8 +2,8 @@
 //
 // The mapping is a pure export precisely so it can be tested without an
 // AudioContext — same reason the car and the fishing fight import no three.js.
-// The property that matters most is the LAST test: ordinary cornering in the
-// drifter must be silent. A screech that plays through normal driving is worse
+// The property that matters most is the ordinary-cornering test: routine
+// driving in the drifter must be silent. A screech that plays through normal driving is worse
 // than no screech, and the car most likely to false-positive is the one Sofia
 // will actually drive.
 
