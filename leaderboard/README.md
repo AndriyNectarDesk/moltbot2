@@ -5,12 +5,20 @@ A small Cloudflare Worker backing the weekly score boards for the three games in
 joint board sums prize points across all three.
 
 Free tier covers this comfortably. KV allows 100k reads and 1k writes a day, and
-an accepted submission costs exactly one write — capped, by design, at
-3 players × 3 games × 50 accepted runs = **450 writes per week, maximum, ever.**
+an accepted submission costs exactly one write, and nothing else on the hot path
+writes at all — the signup throttle is an edge rate-limit binding precisely so it
+does not.
+
+Be honest about the ceiling, though: 63 players × 3 games × 50 accepted runs is
+9,450 writes a week against a free budget of 7,000. Real play is nowhere near
+that — a kid posts a handful of improvements a week, not fifty — but a full
+registry all playing flat out would exceed it, and `LIMITS.maxOpenPlayers` in
+`players.js` is the dial. Raising it moves that ceiling proportionally.
 
 | File | What it is |
 | --- | --- |
 | `worker.js` | routes, storage, identity, the dashboard mount |
+| `players.js` | who may post: the naming rules, the self-signup registry, the throttle |
 | `week.js` | week boundaries (pure) |
 | `games.js` | the game registry, prize points, validation limits |
 | `scoring.js` | ranking, places, joint standings (pure) |
@@ -25,8 +33,10 @@ npx wrangler kv namespace create SCORES --config leaderboard/wrangler.jsonc
 # paste the printed id into wrangler.jsonc
 ```
 
-Then set the two secrets. The roster maps a player id to the **SHA-256 hex of
-their PIN** — the PIN itself is never stored:
+Then set the two secrets. `PLAYERS` is the **family** roster only — the three
+kids — mapping a player id to the **SHA-256 hex of their PIN**; the PIN itself is
+never stored. Everyone else signs themselves up at `POST /join` and lands in KV,
+so they never appear here:
 
 ```bash
 node -e "console.log(require('crypto').createHash('sha256').update('1234').digest('hex'))"
@@ -36,6 +46,13 @@ npx wrangler secret put PLAYERS --config leaderboard/wrangler.jsonc
 
 npx wrangler secret put DASHBOARD_PASSWORD --config leaderboard/wrangler.jsonc
 ```
+
+The rate-limit binding in `wrangler.jsonc` needs no setup — the namespace id is
+just a number you pick, and it is created on deploy. `wrangler dev` enforces it
+locally too (miniflare implements the binding). It fails open only where the
+binding genuinely isn't there, which in practice means the tests — and also if
+the binding itself throws, deliberately: a throttle that turns into an outage on
+every signup would be worse than no throttle.
 
 ```bash
 npm run leaderboard:deploy
@@ -51,12 +68,17 @@ Put the printed URL in [`site/shared/config.js`](../site/shared/config.js) as
 | `GET /games` | `{ games: [{id, label}], week }` |
 | `GET /g/:game/top?week=current&limit=20` | this week's board for one game |
 | `POST /g/:game/score` | body `{player, pin, score, stats, durationMs?}` → `{improved, rank, points, entries}` |
+| `POST /join` | body `{player, pin}` → claim a name, or sign back in to one you own |
 | `GET /joint?week=current` | joint standings plus each game's places |
 | `GET /week/:monday` | the frozen snapshot of a closed week — public, so a kid can check the maths |
 | `GET /admin` | the dashboard (Basic auth) |
 | `POST /admin/close` | freeze a week, return a payout proposal |
 | `POST /admin/payout` | write down a payment that was made |
 | `GET /admin/history` | closed weeks and payouts |
+| `GET /admin/players` | family vs. self-registered, and how many slots are left |
+| `POST /admin/player/remove` | body `{player, week}` → hold the name, delete the account, clear their scores for that week |
+| `POST /admin/players/purge` | body `{week, before?}` → the same for every self-registered player, or everyone who signed up before `before` |
+| `POST /admin/player/restore` | body `{player}` → lift a hold, freeing the name |
 
 `stats` is a free-form bag per game — the shooter sends `{wave, kills, combo}`,
 fishing sends `{landed, heaviest, species, flow}`. Each game declares its own
@@ -97,6 +119,38 @@ Joint ties break on: most wins, then most games played, then earliest last
 qualifying run. Still level after that is a real tie and the prize gets split by
 hand.
 
+## Who may play
+
+Two registries, and once a player exists they are treated identically — same
+board, same prize points, same joint standings.
+
+- **family** — the three kids, in the `PLAYERS` secret. Their names always exist
+  and cannot be claimed by anyone else, because the secret is checked first.
+- **open** — everyone else. A friend types a name and a PIN on the game-over
+  screen, `POST /join` creates them in KV, and they are playing for the same cash
+  as the kids. This was an explicit decision, not a default.
+
+`POST /join` both creates and signs in: a wrong PIN on a name that exists reads
+exactly like any other refusal. So does every refusal at `POST /g/:game/score` —
+that endpoint told the two apart for a while, which made the care taken at
+`/join` worth nothing. Both are throttled per IP at the edge, on separate
+budgets. Names are capped at `maxOpenPlayers`, reserved words like `guest` are
+refused, and a name mixing writing systems is refused outright, because a
+Cyrillic `о` next to Latin letters is an impersonation and nothing else.
+
+A 4-digit PIN is still not a secret and throttling does not make it one. See
+"Honest limits".
+
+**Signup is open to the internet.** Anyone with the URL can register, which means
+someone unknown could end up in a payout proposal. What stands against that:
+
+- Everyone who isn't in the secret is marked `visitor` — on the dashboard, on the
+  hub, and in the boards the games show the kids.
+- The Players section removes one, or clears every self-signup at once. Removing
+  holds the name against re-registration; "allow again" lifts that.
+- A week that has already been closed keeps whatever it froze. Frozen history is
+  not editable, deliberately, so a removal can never rewrite a payout.
+
 ## Honest limits
 
 **Scores cannot be verified, and never will be here.** The games are JavaScript
@@ -107,8 +161,8 @@ destroy what makes these games good to tinker with.
 
 What is done instead:
 
-- **Submissions are attributed.** A roster PIN means nobody can post under a
-  sibling's name or overwrite their row. A four-digit PIN between kids who share
+- **Submissions are attributed.** A PIN means nobody can post under another
+  player's name or overwrite their row. A four-digit PIN between kids who share
   a house is weak — one will watch another type it — so understand what it buys:
   not secrecy, but accountability by default. It turns impersonation from an
   accident into a deliberate act.
@@ -150,7 +204,7 @@ rather than a cost one.
 npm test
 ```
 
-124 tests across the week maths, the points maths, the worker, and the browser
+480 tests across the week maths, the points maths, the worker, and the browser
 client. `week.js` and `scoring.js` are pure and tested directly, which is where
 most of the payout risk lives. The KV mock honours `put` expiry and counts
 writes, so "one write per accepted submission, none for a non-improvement" is

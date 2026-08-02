@@ -29,13 +29,24 @@ const when = (ms) =>
 		minute: "2-digit",
 	}).format(new Date(ms))
 
-function gameTable(gameId, info) {
+/**
+ * A player's name, marked when they are not family.
+ *
+ * Anyone not in the PLAYERS secret is a visitor, including one who has since
+ * been removed from the registry but still has scores on this week's board.
+ * Deciding it by "not family" rather than "in the open list" is what makes that
+ * second case show up rather than pass as a kid.
+ */
+const namer = (family, unmarked) => (id) =>
+	unmarked || family.has(id) ? esc(id) : `${esc(id)} <span class="visitor">visitor</span>`
+
+function gameTable(gameId, info, who) {
 	const rows = info.places
 		.map(
 			(p) => `
 			<tr class="${p.place === 1 ? "win" : ""}">
 				<td class="pl">${p.place}</td>
-				<td class="who">${esc(p.player)}</td>
+				<td class="who">${who(p.player)}</td>
 				<td class="sc">${p.score.toLocaleString("en-CA")}</td>
 				<td class="st">${esc(GAMES[gameId].brag(p.stats || {}) || "")}</td>
 				<td class="pt">${p.points}</td>
@@ -65,13 +76,102 @@ function gameTable(gameId, info) {
 	</section>`
 }
 
-export function renderAdmin({ week, proposal, closed, closedAt, ended, payouts }) {
+/**
+ * Who can post, split by where they came from.
+ *
+ * This section exists because signup is open: anybody who finds the URL can put
+ * themselves on a board a cash prize is paid against. Family comes from the
+ * PLAYERS secret and cannot be touched from here; everyone else registered
+ * themselves and can be removed, which also clears their scores from the week in
+ * view — the only way to get a stranger off the standings before you close.
+ */
+function playersSection(players) {
+	if (players.rosterError) {
+		return `
+	<section>
+		<h2>Players</h2>
+		<p class="warn">
+			The <code>PLAYERS</code> secret is not a map of lowercase player ids, so the worker cannot
+			tell family from visitors and is refusing every score and signup with a 500. Nothing above is
+			marked, because nothing here knows which names are your kids'. Fix it with
+			<code>wrangler secret put PLAYERS</code> — the keys must be exactly the ids, e.g.
+			<code>danylo</code>, not <code>Danylo</code>.
+		</p>
+	</section>`
+	}
+
+	if (players.error) {
+		return `
+	<section>
+		<h2>Players</h2>
+		<p class="warn">
+			The player registry at <code>${esc(players.error)}</code> is corrupt, so this list and the
+			remove buttons are unavailable. The standings above are unaffected and the week can still be
+			closed. Nothing will overwrite the bad value.
+		</p>
+	</section>`
+	}
+
+	const family = players.family
+		.map((id) => `<li><b>${esc(id)}</b> <span class="dim">family</span></li>`)
+		.join("")
+
+	// The button carries the id in a data attribute and is bound by the page
+	// script. It used to be an inline onclick built with JSON.stringify, whose
+	// quotes closed the HTML attribute early — so the handler never compiled and
+	// the one control that gets a stranger off a cash board did nothing at all,
+	// silently, for anyone who clicked it.
+	const open = players.open.length
+		? players.open
+				.map(
+					(p) => `<li>
+					<b>${esc(p.id)}</b>
+					<span class="dim">signed up ${esc(when(p.at))}</span>
+					<button class="tiny drop" data-player="${esc(p.id)}">remove</button>
+				</li>`,
+				)
+				.join("")
+		: `<li class="note">nobody has signed themselves up yet</li>`
+
+	const banned = players.banned.length
+		? `<h3>Removed</h3>
+		<ul class="players">${players.banned
+			.map(
+				(b) => `<li>
+					<b>${esc(b.id)}</b>
+					<span class="dim">removed ${esc(when(b.at))}</span>
+					<button class="tiny restore" data-player="${esc(b.id)}">allow again</button>
+				</li>`,
+			)
+			.join("")}</ul>
+		<p class="note">These names are held, not freed — signing up again with them is refused.</p>`
+		: ""
+
+	return `
+	<section>
+		<h2>Players</h2>
+		<ul class="players">${family}${open}</ul>
+		<p class="note">
+			${players.open.length} of ${players.max} self-signup slots used. Removing a player holds their
+			name, deletes their account and clears their scores in the week shown above; a week already
+			closed keeps whatever it froze.
+		</p>
+		${players.open.length ? `<button class="tiny" id="purge">Remove all self-signups</button>` : ""}
+		${banned}
+	</section>`
+}
+
+export function renderAdmin({ week, proposal, closed, closedAt, ended, payouts, players }) {
+	// With the roster unreadable nothing can be told from anything, so no name is
+	// marked rather than every name being marked wrongly.
+	const who = namer(new Set(players.family), players.unmarked)
+
 	const jointRows = proposal.joint
 		.map(
 			(p, i) => `
 		<tr class="${i === 0 ? "win" : ""}">
 			<td class="pl">${i + 1}</td>
-			<td class="who">${esc(p.player)}</td>
+			<td class="who">${who(p.player)}</td>
 			<td class="pt big">${p.total}</td>
 			<td class="brk">${GAME_IDS.map((g) => (p.perGame[g] ? `${g} ${p.perGame[g].points}` : "")).filter(Boolean).join(" &middot; ")}</td>
 		</tr>`,
@@ -123,6 +223,15 @@ export function renderAdmin({ week, proposal, closed, closedAt, ended, payouts }
 	code { background: #171233; padding: 1px 5px; border-radius: 3px; font-size: 12px; }
 	ul.paid { margin: 6px 0; padding-left: 18px; }
 	.warn { color: #ffb347; font-size: 12px; }
+	.visitor { display: inline-block; background: #12203a; color: #9fd0ff; border: 1px solid #24406e;
+		border-radius: 3px; padding: 0 5px; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; }
+	ul.players { list-style: none; margin: 6px 0; padding: 0; }
+	ul.players li { display: flex; align-items: center; gap: 10px; padding: 5px 0;
+		border-bottom: 1px solid var(--line); }
+	button.tiny { margin-left: auto; font-size: 11px; padding: 3px 9px; }
+	h3 { font-size: 11px; letter-spacing: 2px; color: var(--dim); margin: 18px 0 4px;
+		text-transform: uppercase; font-weight: 400; }
+	#purge { margin-left: 0; }
 </style>
 </head><body><div class="wrap">
 
@@ -147,7 +256,9 @@ ${
 }
 ${jointRows ? `<table><thead><tr><th>#</th><th>player</th><th>pts</th><th>from</th></tr></thead><tbody>${jointRows}</tbody></table>` : `<p class="note">no qualifying runs yet this week</p>`}
 
-${GAME_IDS.map((id) => gameTable(id, proposal.perGame[id])).join("")}
+${GAME_IDS.map((id) => gameTable(id, proposal.perGame[id], who)).join("")}
+
+${playersSection(players)}
 
 <h2>Paid out</h2>
 ${paid}
@@ -174,6 +285,45 @@ ${paid}
 		const d = await r.json()
 		alert(r.ok ? "Closed. Winner: " + (d.proposal.jointWinner || "nobody") : "Failed: " + d.error)
 		if (r.ok) location.reload()
+	}
+	async function admin_(path, body, done) {
+		const r = await fetch(path, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", "X-Prize-Admin": "1" },
+			body: JSON.stringify(body),
+		})
+		const d = await r.json()
+		alert(r.ok ? done(d) : "Failed: " + d.error)
+		if (r.ok) location.reload()
+	}
+
+	// Bound here rather than inline in the markup. An inline handler carrying a
+	// player id has to survive HTML attribute quoting, and the first version of
+	// this did not: the id arrived already wrapped in double quotes, which closed
+	// the attribute early, so the handler never compiled and the button failed
+	// silently on click for its whole life.
+	for (const btn of document.querySelectorAll("button.drop")) {
+		btn.onclick = () => {
+			const player = btn.dataset.player
+			if (!confirm("Remove " + player + ", hold their name, and delete their scores for week " + week + "?")) return
+			admin_("/admin/player/remove", { player, week }, () => "Removed " + player + ".")
+		}
+	}
+
+	for (const btn of document.querySelectorAll("button.restore")) {
+		btn.onclick = () => {
+			const player = btn.dataset.player
+			if (!confirm("Allow " + player + " to sign up again?")) return
+			admin_("/admin/player/restore", { player }, () => player + " can sign up again.")
+		}
+	}
+
+	const purgeBtn = document.getElementById("purge")
+	if (purgeBtn) {
+		purgeBtn.onclick = () => {
+			if (!confirm("Remove EVERY self-signed-up player and their scores for week " + week + "? The three kids are unaffected.")) return
+			admin_("/admin/players/purge", { week }, (d) => "Removed " + d.removed.length + " player(s).")
+		}
 	}
 	async function pay() {
 		const player = document.getElementById("p").value.trim()

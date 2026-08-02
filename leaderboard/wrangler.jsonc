@@ -14,6 +14,21 @@
     }
   ],
 
+  // Throttles signup and failed sign-ins, at the edge and with no KV writes.
+  // A KV counter was the obvious way to do this and the wrong one: it wrote on
+  // every attempt, which is exactly how v1's rate limiter could burn the free
+  // tier's 1k writes/day (see the note at the top of worker.js).
+  //
+  // Two counters share this binding, keyed "join:<ip>" and "auth:<ip>", so a
+  // guesser hammering sign-ins cannot also lock the signup form.
+  "ratelimits": [
+    {
+      "name": "LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 5, "period": 60 }
+    }
+  ],
+
   // Sets the Access-Control-Allow-Origin header. NOTE this does not block
   // anything server-side — another origin's request still succeeds and is still
   // written, it just gets a header its browser won't accept, and curl ignores

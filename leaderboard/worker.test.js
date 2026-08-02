@@ -58,6 +58,10 @@ function makeKV(clock = () => NOW) {
 				expiresAt: opts.expirationTtl ? clock() + opts.expirationTtl * 1000 : null,
 			})
 		},
+		async delete(k) {
+			writes++
+			m.delete(k)
+		},
 	}
 }
 
@@ -91,6 +95,23 @@ const post = (player, score, stats = { wave: 6, kills: 40, combo: 5 }, game = "n
 	call("POST", `/g/${game}/score`, { player, pin: PINS[player], score, stats, ...extra })
 
 const top = async (game = "nova") => (await call("GET", `/g/${game}/top`)).json()
+
+/**
+ * Stands in for the edge rate-limit binding.
+ *
+ * Absent by default, because most tests are not about throttling and the real
+ * binding fails open off Cloudflare anyway. A test that cares assigns one.
+ */
+const fakeLimiter = (limit) => {
+	const seen = new Map()
+	return {
+		async limit({ key }) {
+			const n = (seen.get(key) || 0) + 1
+			seen.set(key, n)
+			return { success: n <= limit }
+		},
+	}
+}
 
 // Mirrors what the dashboard page sends: Basic credentials plus the custom
 // header that a cross-origin form can't set.
@@ -218,7 +239,11 @@ describe("storing scores", () => {
 	it("hides flags and rate state from players", async () => {
 		await post("danylo", 12000)
 		const d = await top()
-		expect(Object.keys(d.entries[0]).sort()).toEqual(["at", "player", "score", "stats"])
+		// `visitor` is public on purpose — the kids never see the dashboard, and a
+		// name is not proof of who somebody is. Flags, runs and lastAcceptedAt are
+		// still dashboard-only.
+		expect(Object.keys(d.entries[0]).sort()).toEqual(["at", "player", "score", "stats", "visitor"])
+		expect(d.entries[0].visitor).toBe(false)
 	})
 
 	it("stamps its own time, ignoring anything the client sends", async () => {
@@ -417,12 +442,45 @@ describe("identity", () => {
 	it("refuses a wrong pin", async () => {
 		const r = await call("POST", "/g/nova/score", {
 			player: "danylo",
-			pin: "0000",
-			score: 100,
-			stats: { wave: 1, kills: 1, combo: 1 },
+			pin: "9999",
+			score: 12000,
+			stats: { wave: 6, kills: 40, combo: 5 },
 		})
 		expect(r.status).toBe(403)
-		expect((await r.json()).error).toBe("wrong pin")
+		expect((await r.json()).error).toMatch(/pin/)
+	})
+
+	// The score endpoint used to say "unknown player" for a name with no account
+	// and "wrong pin" for one that had it — which answered, for free and with no
+	// side effect, the exact question /join is careful not to answer. Wording
+	// parity at /join is worth nothing while this endpoint tells you anyway.
+	it("does not say whether a name has an account", async () => {
+		const bad = (player) =>
+			call("POST", "/g/nova/score", { player, pin: "9999", score: 12000, stats: { wave: 6, kills: 40, combo: 5 } })
+
+		await join("zoe", "4242")
+		const [known, unknown, family] = await Promise.all([bad("zoe"), bad("nobodyhere"), bad("danylo")])
+		expect([known.status, unknown.status, family.status]).toEqual([403, 403, 403])
+		const errors = await Promise.all([known.json(), unknown.json(), family.json()])
+		expect(new Set(errors.map((e) => e.error)).size).toBe(1)
+	})
+
+	// The PIN is the only real gate on writing, so the endpoint an attacker would
+	// actually walk it at has to cost something.
+	it("throttles failed sign-ins at the score endpoint", async () => {
+		env.LIMITER = fakeLimiter(2)
+		const bad = () =>
+			call("POST", "/g/nova/score", {
+				player: "danylo",
+				pin: "9999",
+				score: 12000,
+				stats: { wave: 6, kills: 40, combo: 5 },
+			})
+		expect((await bad()).status).toBe(403)
+		expect((await bad()).status).toBe(403)
+		expect((await bad()).status).toBe(429)
+		// An honest player never meets it: only failures are charged.
+		expect((await post("danylo", 12000)).status).toBe(200)
 	})
 
 	it("refuses a missing pin", async () => {
@@ -833,5 +891,541 @@ describe("payouts", () => {
 	it("rejects a bad amount or week", async () => {
 		expect((await admin("POST", "/admin/payout", { week: WEEK, player: "mike", amount: -1 })).status).toBe(400)
 		expect((await admin("POST", "/admin/payout", { week: "nope", player: "mike", amount: 5 })).status).toBe(400)
+	})
+})
+
+// ------------------------------------------------------------ open signup
+//
+// The three kids are in a secret. Everyone else — the friends they bring home —
+// signs themselves up here and competes for the same prize, which is what these
+// tests are really guarding: an open player is not a second-class one.
+
+const join = (player, pin, headers = {}) => call("POST", "/join", { player, pin }, headers)
+
+const postAs = (player, pin, score, stats = { wave: 6, kills: 40, combo: 5 }, game = "nova") =>
+	call("POST", `/g/${game}/score`, { player, pin, score, stats })
+
+describe("signing up", () => {
+	it("creates a player and lets them post straight away", async () => {
+		const r = await join("Zoe", "4242")
+		expect(r.status).toBe(200)
+		expect(await r.json()).toMatchObject({ ok: true, player: "zoe", created: true, kind: "open" })
+
+		expect((await postAs("zoe", "4242", 9000)).status).toBe(200)
+		expect((await top()).entries.map((e) => e.player)).toEqual(["zoe"])
+	})
+
+	it("signs an existing player back in rather than refusing them", async () => {
+		await join("zoe", "4242")
+		// Same call from a different device, or after clearing the browser.
+		const r = await join("ZOE", "4242")
+		expect(r.status).toBe(200)
+		expect(await r.json()).toMatchObject({ ok: true, player: "zoe", created: false })
+	})
+
+	it("refuses a name that is taken, without confirming it exists", async () => {
+		await join("zoe", "4242")
+		const r = await join("zoe", "1234")
+		expect(r.status).toBe(403)
+		// Same wording as claiming a kid's name — this must not be an oracle for
+		// who has an account.
+		const mine = await join("danylo", "9999")
+		expect((await r.json()).error).toBe((await mine.json()).error)
+	})
+
+	it("lets a kid sign in with their own PIN but never lets one be created", async () => {
+		expect(await (await join("danylo", PINS.danylo)).json()).toMatchObject({
+			ok: true,
+			player: "danylo",
+			created: false,
+			kind: "family",
+		})
+		// and nothing was written to the registry for them
+		expect((await (await admin("GET", "/admin/players")).json()).open).toEqual([])
+	})
+
+	it("rejects names that can't be one and PINs that can't be typed", async () => {
+		expect((await join("z", "4242")).status).toBe(400)
+		expect((await join("1234", "4242")).status).toBe(400)
+		expect((await join("guest", "4242")).status).toBe(400)
+		expect((await join("zoe", "12")).status).toBe(400)
+		expect((await join("zoe", "abcd")).status).toBe(400)
+	})
+
+	it("stops a PIN guesser without locking out the rest of the house", async () => {
+		env.LIMITER = fakeLimiter(3)
+		for (let i = 0; i < 3; i++) expect((await join("danylo", String(1000 + i))).status).toBe(403)
+		expect((await join("danylo", "1111")).status).toBe(429)
+		// A different address is unaffected.
+		expect((await join("zoe", "4242", { "CF-Connecting-IP": "5.6.7.8" })).status).toBe(200)
+	})
+
+	// The counter this replaced wrote to KV on every attempt, which is how v1
+	// could burn a day's free-tier writes in an afternoon.
+	it("costs no KV writes when it refuses", async () => {
+		env.LIMITER = fakeLimiter(0)
+		env.SCORES.resetWrites()
+		expect((await join("zoe", "4242")).status).toBe(429)
+		expect(env.SCORES.writes).toBe(0)
+	})
+
+	it("stops taking signups once the arcade is full", async () => {
+		const index = { v: 1, players: [] }
+		for (let i = 0; i < 60; i++) index.players.push({ id: `kid${i}`, at: NOW })
+		env.SCORES.m.set("players:index", { value: JSON.stringify(index), expiresAt: null })
+		expect((await join("zoe", "4242")).status).toBe(409)
+	})
+})
+
+describe("an open player is a full player", () => {
+	beforeEach(async () => {
+		await join("zoe", "4242")
+	})
+
+	it("earns place points and appears on the joint board", async () => {
+		await postAs("zoe", "4242", 20000)
+		await post("danylo", 9000)
+
+		const d = await (await call("GET", "/joint")).json()
+		expect(d.standings[0]).toMatchObject({ player: "zoe", total: 11 })
+		expect(d.standings[1]).toMatchObject({ player: "danylo", total: 7 })
+	})
+
+	it("can win the whole week, and the payout proposal says so", async () => {
+		await postAs("zoe", "4242", 20000)
+		await post("danylo", 9000)
+		const d = await (await admin("POST", `/admin/close?week=${WEEK}&force=1`)).json()
+		expect(d.proposal.jointWinner).toBe("zoe")
+	})
+
+	it("cannot post as somebody else", async () => {
+		expect((await postAs("zoe", "1111", 9000)).status).toBe(403)
+		expect((await postAs("danylo", "4242", 9000)).status).toBe(403)
+	})
+
+	it("gets its own row rather than sharing one", async () => {
+		await join("mo", "5555")
+		await postAs("zoe", "4242", 9000)
+		await postAs("mo", "5555", 8000)
+		expect((await top()).entries.map((e) => e.player)).toEqual(["zoe", "mo"])
+	})
+})
+
+describe("removing a player", () => {
+	beforeEach(async () => {
+		await join("zoe", "4242")
+		await postAs("zoe", "4242", 20000)
+		await post("danylo", 9000)
+	})
+
+	it("takes their account and this week's scores with them", async () => {
+		const r = await admin("POST", "/admin/player/remove", { player: "zoe", week: WEEK })
+		expect(r.status).toBe(200)
+		expect(await r.json()).toMatchObject({ ok: true, player: "zoe", removed: true, cleared: { nova: 1 } })
+
+		expect((await top()).entries.map((e) => e.player)).toEqual(["danylo"])
+		expect((await (await admin("GET", "/admin/players")).json()).open).toEqual([])
+		// and the name is free again, which is the point of removing it
+		expect((await postAs("zoe", "4242", 9000)).status).toBe(403)
+	})
+
+	it("leaves the other games alone", async () => {
+		await postAs("zoe", "4242", 5, { landed: 3, heaviest: 4000, species: 2, flow: 15 }, "fish")
+		await admin("POST", "/admin/player/remove", { player: "zoe", week: WEEK })
+		expect((await top("fish")).entries).toEqual([])
+		expect((await top("city")).entries).toEqual([])
+	})
+
+	// History that can be edited is worth nothing to a kid disputing a payout.
+	it("refuses to touch a week that has been closed", async () => {
+		await admin("POST", `/admin/close?week=${WEEK}&force=1`)
+		const r = await admin("POST", "/admin/player/remove", { player: "zoe", week: WEEK })
+		expect(r.status).toBe(409)
+		const snap = await (await call("GET", `/week/${WEEK}`)).json()
+		expect(snap.standings[0].player).toBe("zoe")
+	})
+
+	it("will not pretend to remove a kid", async () => {
+		const r = await admin("POST", "/admin/player/remove", { player: "danylo", week: WEEK })
+		expect(r.status).toBe(400)
+		expect((await top()).entries.map((e) => e.player)).toContain("danylo")
+	})
+
+	it("needs the same auth and header as every other admin write", async () => {
+		expect((await call("POST", "/admin/player/remove", { player: "zoe" })).status).toBe(401)
+		const noHeader = await call("POST", "/admin/player/remove", { player: "zoe" }, {
+			Authorization: "Basic " + btoa("dad:hunter2"),
+		})
+		expect(noHeader.status).toBe(403)
+	})
+})
+
+describe("the dashboard tells family from visitors", () => {
+	it("marks a self-registered player in the standings", async () => {
+		await join("zoe", "4242")
+		await postAs("zoe", "4242", 20000)
+		await post("danylo", 9000)
+
+		const page = await (await admin("GET", "/admin")).text()
+		expect(page).toMatch(/zoe <span class="visitor">visitor<\/span>/)
+		expect(page).not.toMatch(/danylo <span class="visitor">/)
+		expect(page).toMatch(/1 of 60 self-signup slots used/)
+	})
+
+	// Removed from the registry, still on the board: the row must not quietly
+	// start reading as one of the kids.
+	it("still marks someone who has been removed but has scores", async () => {
+		await join("zoe", "4242")
+		await postAs("zoe", "4242", 20000)
+		env.SCORES.m.delete("player:zoe")
+		env.SCORES.m.set("players:index", { value: JSON.stringify({ v: 1, players: [] }), expiresAt: null })
+
+		expect(await (await admin("GET", "/admin")).text()).toMatch(/zoe <span class="visitor">/)
+	})
+})
+
+// ------------------------------------------------------------ the roster trap
+
+describe("the PLAYERS secret", () => {
+	// The trap this closes: a stray capital used to mean the kid's own correct PIN
+	// no longer signed him in as family, and instead REGISTERED him as an ordinary
+	// self-signup whose name could later be handed to somebody else. ARCADE.md
+	// asks for this JSON to be hand-typed to rotate the placeholder PINs, so the
+	// typo has a moment scheduled for it.
+	it("refuses to serve at all if a key is not a normalized id", async () => {
+		env.PLAYERS = JSON.stringify({ Danylo: sha("1111") })
+		const r = await join("Danylo", "1111")
+		expect(r.status).toBe(500)
+		expect((await r.json()).error).toMatch(/misconfigured/)
+		// and above all it has not quietly created him as a self-signup
+		expect(env.SCORES.m.has("player:danylo")).toBe(false)
+	})
+
+	it("refuses a key with spaces, punctuation or the wrong length just the same", async () => {
+		for (const bad of [" danylo", "danylo ", "d", "a".repeat(20), "danyl0!"]) {
+			env.PLAYERS = JSON.stringify({ [bad]: sha("1111") })
+			expect((await post("danylo", 12000)).status).toBe(500)
+		}
+	})
+
+	// This used to assert reads were "fine" and never look at what they said. They
+	// said every kid was a visitor: `familyRoster` returning null was swallowed by
+	// `|| {}` on every read path, so the badge added to protect the kids inverted
+	// and called all three of them strangers, with no error anywhere.
+	it("refuses reads too, rather than serving a board with no family on it", async () => {
+		await post("danylo", 12000)
+		env.PLAYERS = JSON.stringify({ Danylo: sha("1111") })
+
+		for (const path of ["/g/nova/top", "/joint", "/admin/players"]) {
+			const r = await (path === "/admin/players" ? admin("GET", path) : call("GET", path))
+			expect(r.status, path).toBe(500)
+			expect((await r.json()).error, path).toMatch(/misconfigured/)
+		}
+	})
+
+	// …except the dashboard, which is where you go to look when something is
+	// wrong. It stays reachable and says what is broken, and marks nobody rather
+	// than marking everybody wrongly.
+	it("still renders the dashboard, unmarked, and says what to fix", async () => {
+		await post("danylo", 12000)
+		env.PLAYERS = JSON.stringify({ Danylo: sha("1111") })
+
+		const r = await admin("GET", "/admin")
+		expect(r.status).toBe(200)
+		const page = await r.text()
+		expect(page).toMatch(/danylo/)
+		expect(page).toMatch(/PLAYERS/)
+		expect(page).not.toMatch(/class="visitor"/)
+	})
+
+	it("says so rather than serving when the secret isn't even JSON", async () => {
+		env.PLAYERS = "{oops"
+		expect((await post("danylo", 12000)).status).toBe(500)
+	})
+})
+
+// ------------------------------------------------------------ tombstones
+
+describe("a removed player stays removed", () => {
+	beforeEach(async () => {
+		await join("troll", "4242")
+		await postAs("troll", "4242", 20000)
+		await admin("POST", "/admin/player/remove", { player: "troll", week: WEEK })
+	})
+
+	// Without this the dashboard's only enforcement action is a suggestion: the
+	// person you just threw off signs up again with the same two words.
+	it("refuses the same name and PIN straight back", async () => {
+		const r = await join("troll", "4242")
+		expect(r.status).toBe(403)
+		expect((await r.json()).error).toMatch(/taken/)
+		expect((await postAs("troll", "4242", 9000)).status).toBe(403)
+	})
+
+	it("refuses a different PIN too, and does not free a slot", async () => {
+		expect((await join("troll", "9999")).status).toBe(403)
+		const d = await (await admin("GET", "/admin/players")).json()
+		expect(d.open).toEqual([])
+		expect(d.banned.map((b) => b.id)).toEqual(["troll"])
+	})
+
+	it("can be let back in", async () => {
+		expect((await admin("POST", "/admin/player/restore", { player: "troll" })).status).toBe(200)
+		expect((await join("troll", "1234")).status).toBe(200)
+		const d = await (await admin("GET", "/admin/players")).json()
+		expect(d.banned).toEqual([])
+		expect(d.open.map((p) => p.id)).toEqual(["troll"])
+	})
+})
+
+describe("clearing a squat", () => {
+	beforeEach(async () => {
+		for (const name of ["squata", "squatb", "squatc"]) {
+			await join(name, "4242")
+			await postAs(name, "4242", 9000)
+		}
+	})
+
+	it("removes every self-signup at once, and their scores", async () => {
+		const r = await admin("POST", "/admin/players/purge", { week: WEEK })
+		expect(r.status).toBe(200)
+		expect((await r.json()).removed.sort()).toEqual(["squata", "squatb", "squatc"])
+		expect((await top()).entries).toEqual([])
+		expect((await (await admin("GET", "/admin/players")).json()).open).toEqual([])
+	})
+
+	it("leaves the kids alone", async () => {
+		await post("danylo", 12000)
+		await admin("POST", "/admin/players/purge", { week: WEEK })
+		expect((await top()).entries.map((e) => e.player)).toEqual(["danylo"])
+		expect((await post("mike", 30000)).status).toBe(200)
+	})
+
+	it("can spare the friends who signed up after the squat", async () => {
+		env.__NOW = NOW + 60_000
+		await join("realfriend", "5555")
+		const r = await admin("POST", "/admin/players/purge", { week: WEEK, before: NOW + 1 })
+		expect((await r.json()).removed.sort()).toEqual(["squata", "squatb", "squatc"])
+		expect((await (await admin("GET", "/admin/players")).json()).open.map((p) => p.id)).toEqual(["realfriend"])
+	})
+
+	it("refuses on a closed week, like every other removal", async () => {
+		await admin("POST", `/admin/close?week=${WEEK}&force=1`)
+		expect((await admin("POST", "/admin/players/purge", { week: WEEK })).status).toBe(409)
+	})
+
+	it("needs the same auth and header as every other admin write", async () => {
+		expect((await call("POST", "/admin/players/purge", { week: WEEK })).status).toBe(401)
+		const noHeader = await call("POST", "/admin/players/purge", { week: WEEK }, {
+			Authorization: "Basic " + btoa("dad:hunter2"),
+		})
+		expect(noHeader.status).toBe(403)
+	})
+})
+
+// ------------------------------------------------------------ the dashboard
+
+describe("the dashboard survives a corrupt registry", () => {
+	beforeEach(async () => {
+		await post("danylo", 12000)
+		env.SCORES.m.set("players:index", { value: JSON.stringify({ v: 1, players: "nope" }), expiresAt: null })
+	})
+
+	// It is worth refusing to WRITE over a corrupt registry. It is not worth
+	// refusing to show a week's standings, the flag column and the close button
+	// for — which is what a 500 here used to take out, with no way back from
+	// inside the UI.
+	it("still renders the standings and says which key is bad", async () => {
+		const r = await admin("GET", "/admin")
+		expect(r.status).toBe(200)
+		const page = await r.text()
+		expect(page).toMatch(/danylo/)
+		expect(page).toMatch(/players:index/)
+		expect(page).toMatch(/is corrupt/)
+	})
+
+	it("still closes the week", async () => {
+		expect((await admin("POST", `/admin/close?week=${WEEK}&force=1`)).status).toBe(200)
+	})
+
+	// The JSON route keeps the old behaviour: a caller asking specifically for the
+	// registry should hear that it is broken, not be handed an empty list.
+	it("still refuses on the players endpoint itself", async () => {
+		expect((await admin("GET", "/admin/players")).status).toBe(500)
+	})
+})
+
+describe("the remove button", () => {
+	// It rendered as an onclick whose own quotes closed the HTML attribute, so the
+	// handler never compiled and clicking the one control that gets a stranger off
+	// a cash board did nothing at all. Every test at the time called the endpoint
+	// directly, so the suite stayed green over a dead button.
+	it("renders with the id in an attribute that survives quoting", async () => {
+		await join("zoe", "4242")
+		const page = await (await admin("GET", "/admin")).text()
+		expect(page).toMatch(/<button class="tiny drop" data-player="zoe">/)
+		// No inline handler anywhere carries a player id — that is the whole fix.
+		expect(page).not.toMatch(/onclick="[a-z_]+\((?!\)|true|false)/i)
+	})
+
+	it("has a handler bound to it by the page script", async () => {
+		await join("zoe", "4242")
+		const page = await (await admin("GET", "/admin")).text()
+		expect(page).toMatch(/querySelectorAll\("button\.drop"\)/)
+		expect(page).toMatch(/btn\.dataset\.player/)
+	})
+
+	it("escapes a name that would otherwise break out of the attribute", async () => {
+		// normalizeName already makes this impossible from /join; the escaping is
+		// the belt to those braces, because the failure mode is script injection on
+		// the one page that can freeze a week and record a payout.
+		const nasty = String.fromCharCode(34) + "><script>x</script>"
+		env.SCORES.m.set("players:index", {
+			value: JSON.stringify({ v: 1, players: [{ id: nasty, at: NOW }], banned: [] }),
+			expiresAt: null,
+		})
+		const page = await (await admin("GET", "/admin")).text()
+		expect(page).not.toMatch(/<script>x<\/script>/)
+	})
+})
+
+describe("visitors are marked where the kids can see them", () => {
+	it("marks non-family players on the public game board", async () => {
+		await join("zoe", "4242")
+		await postAs("zoe", "4242", 20000)
+		await post("danylo", 9000)
+		const d = await top()
+		expect(d.entries.map((e) => [e.player, e.visitor])).toEqual([
+			["zoe", true],
+			["danylo", false],
+		])
+	})
+
+	it("marks them on the joint board too", async () => {
+		await join("zoe", "4242")
+		await postAs("zoe", "4242", 20000)
+		await post("danylo", 9000)
+		const d = await (await call("GET", "/joint")).json()
+		expect(d.standings.map((p) => [p.player, p.visitor])).toEqual([
+			["zoe", true],
+			["danylo", false],
+		])
+		expect(d.perGame.nova.places.map((p) => p.visitor)).toEqual([true, false])
+	})
+
+	it("marks a name that only LOOKS like a kid's", async () => {
+		// Rejected at signup now, so it can only reach a board that predates the
+		// rule — which is exactly when the badge earns its place.
+		env.SCORES.m.set("wk:nova:" + WEEK, {
+			value: JSON.stringify({
+				v: 2,
+				game: "nova",
+				week: WEEK,
+				entries: [{ player: "danylо", score: 30000, at: NOW, stats: {}, runs: 1 }],
+			}),
+			expiresAt: null,
+		})
+		const d = await top()
+		expect(d.entries[0].visitor).toBe(true)
+	})
+})
+
+
+describe("a name that re-normalises to something else", () => {
+	// The blocker this closes: the remove button hands back the id it rendered, so
+	// a name whose normalisation was not a fixed point resolved to a player who
+	// did not exist. The button alerted "Removed", reloaded, and left the row —
+	// the same silent no-op the button was rebuilt to stop being.
+	const TRICKY = "İvil"
+
+	it("registers as one stable id", async () => {
+		const r = await join(TRICKY, "4242")
+		expect(r.status).toBe(200)
+		const { player } = await r.json()
+		// Whatever it normalises to, signing in again must reach the same account.
+		expect((await (await join(player, "4242")).json())).toMatchObject({ player, created: false })
+	})
+
+	it("can actually be removed, scores and all", async () => {
+		const { player } = await (await join(TRICKY, "4242")).json()
+		await postAs(player, "4242", 20000)
+		expect((await top()).entries.map((e) => e.player)).toEqual([player])
+
+		const r = await admin("POST", "/admin/player/remove", { player, week: WEEK })
+		expect(await r.json()).toMatchObject({ ok: true, player, removed: true, cleared: { nova: 1 } })
+		expect((await top()).entries).toEqual([])
+
+		const listed = await (await admin("GET", "/admin/players")).json()
+		expect(listed.open).toEqual([])
+		expect(listed.banned.map((b) => b.id)).toEqual([player])
+		// and no phantom second tombstone under a differently-normalised id
+		expect(listed.banned).toHaveLength(1)
+	})
+
+	it("can be let back in again", async () => {
+		const { player } = await (await join(TRICKY, "4242")).json()
+		await admin("POST", "/admin/player/remove", { player, week: WEEK })
+		expect((await admin("POST", "/admin/player/restore", { player })).status).toBe(200)
+		expect((await (await admin("GET", "/admin/players")).json()).banned).toEqual([])
+	})
+})
+
+describe("a closed week keeps its badges", () => {
+	// The badge vanished from the hub the moment a week closed, because the frozen
+	// snapshot has no `visitor` field — so it disappeared for exactly the week a
+	// payout is decided from, while /g/:game/top still showed it. Two boards on
+	// one page, disagreeing.
+	it("marks visitors in the frozen standings too", async () => {
+		await join("zoe", "4242")
+		await postAs("zoe", "4242", 20000)
+		await post("danylo", 9000)
+		await admin("POST", `/admin/close?week=${WEEK}&force=1`)
+
+		const d = await (await call("GET", `/joint?week=${WEEK}`)).json()
+		expect(d.closed).toBe(true)
+		expect(d.standings.map((p) => [p.player, p.visitor])).toEqual([
+			["zoe", true],
+			["danylo", false],
+		])
+		expect(d.perGame.nova.places.map((p) => p.visitor)).toEqual([true, false])
+	})
+
+	it("leaves the snapshot itself untouched", async () => {
+		await join("zoe", "4242")
+		await postAs("zoe", "4242", 20000)
+		await admin("POST", `/admin/close?week=${WEEK}&force=1`)
+		// Recomputed on read, never frozen: who is family is a property of the
+		// secret, not of the week.
+		const snap = await (await call("GET", `/week/${WEEK}`)).json()
+		expect(snap.standings[0].visitor).toBeUndefined()
+	})
+})
+
+describe("purge input", () => {
+	it("refuses a cutoff that isn't a number rather than reading it as everyone", async () => {
+		await join("zoe", "4242")
+		for (const before of ["Infinity", "yesterday", {}, true]) {
+			const r = await admin("POST", "/admin/players/purge", { week: WEEK, before })
+			expect(r.status, JSON.stringify(before)).toBe(400)
+		}
+		expect((await (await admin("GET", "/admin/players")).json()).open).toHaveLength(1)
+	})
+})
+
+describe("removal survives a corrupt board", () => {
+	// clearEntries writes each game's board as it goes, so a bad one throws
+	// partway. De-registering first means the player cannot post anything more
+	// while that is being sorted out — the reason the order was swapped back once
+	// removal started leaving a tombstone instead of a hole.
+	it("de-registers the player even when clearing their scores fails", async () => {
+		await join("troll", "4242")
+		await postAs("troll", "4242", 20000)
+		env.SCORES.m.set("wk:fish:" + WEEK, { value: JSON.stringify({ v: 9, junk: true }), expiresAt: null })
+
+		const r = await admin("POST", "/admin/player/remove", { player: "troll", week: WEEK })
+		expect(r.status).toBe(500)
+		// but they are already off the registry and can no longer post
+		expect((await postAs("troll", "4242", 30000)).status).toBe(403)
+		expect((await join("troll", "4242")).status).toBe(403)
 	})
 })

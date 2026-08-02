@@ -392,6 +392,90 @@ h2 {
 	box-shadow: 0 0 16px rgba(49, 230, 255, 0.35);
 }
 
+/* Sign-up is an action, not a player, so it reads as an outline rather than
+   another name you could be. */
+.who.add {
+	border-style: dashed;
+	border-color: rgba(49, 230, 255, 0.45);
+	color: var(--cyan);
+}
+
+.join-panel {
+	margin: 0 auto 10px;
+	padding: 12px;
+	max-width: 340px;
+	background: rgba(10, 6, 22, 0.7);
+	border: 1px solid rgba(49, 230, 255, 0.3);
+	border-radius: 6px;
+}
+
+.join-fields {
+	display: flex;
+	gap: 8px;
+	justify-content: center;
+	align-items: stretch;
+}
+
+.name-input {
+	pointer-events: auto;
+	flex: 1 1 auto;
+	min-width: 0;
+	font-family: inherit;
+	font-size: 14px;
+	font-weight: 700;
+	letter-spacing: 2px;
+	text-align: center;
+	text-transform: uppercase;
+	padding: 10px 12px;
+	color: #fff;
+	background: rgba(10, 6, 22, 0.85);
+	border: 1px solid rgba(255, 255, 255, 0.28);
+	border-radius: 4px;
+	outline: none;
+}
+
+.name-input:focus {
+	border-color: var(--cyan);
+	box-shadow: 0 0 16px rgba(49, 230, 255, 0.35);
+}
+
+.join-hint {
+	margin-top: 8px;
+	font-size: 10px;
+	letter-spacing: 1px;
+	line-height: 1.5;
+	color: rgba(255, 255, 255, 0.45);
+}
+
+.join-msg {
+	margin-top: 6px;
+	font-size: 11px;
+	letter-spacing: 2px;
+	color: var(--cyan);
+	min-height: 14px;
+}
+
+.join-msg.warn {
+	color: var(--orange-hot);
+}
+
+/* Somebody who isn't one of the three kids. The dashboard has always marked
+   these; the kids only ever see these tables, and a name is not proof of who
+   somebody is — two rows reading DANYLO is a thing they should be able to spot
+   without asking their dad to log in. */
+.vis {
+	display: inline-block;
+	vertical-align: 1px;
+	margin-left: 6px;
+	padding: 1px 5px;
+	font-size: 8px;
+	letter-spacing: 1px;
+	color: var(--cyan);
+	background: rgba(49, 230, 255, 0.12);
+	border: 1px solid rgba(49, 230, 255, 0.35);
+	border-radius: 3px;
+}
+
 /* ============================ SCORE TABLE ============================ */
 .board {
 	margin: 0 auto 20px;

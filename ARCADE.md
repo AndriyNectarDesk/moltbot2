@@ -17,7 +17,7 @@ part has its own README with the detail.
 ```
 site/                 the games — see site/README.md
   index.html …        the hub: three cards + the joint prize board
-  shared/             util, input, the score client, base.css
+  shared/             util, input, the score client, identity strip, base.css
   vendor/             three.js r185, shared by all three games
   nova/               DANYLO: NECTAR NOVA   3D arena shooter
   fish/               MIKE: QUIET WATER     3-minute fishing runs
@@ -26,11 +26,17 @@ leaderboard/          the Cloudflare Worker — see leaderboard/README.md
 ```
 
 Run everything locally with `npm run site` (→ http://127.0.0.1:5180/). Tests are
-`npm test` — **336** of them, and they run in CI on every push and PR.
+`npm test` — **490** of them, and they run in CI on every push and PR.
 
 ---
 
 ## Open items, in priority order
+
+**0. Signup is open to the internet.** Anyone who finds the URL can register a
+name and a PIN from the game-over screen and, by explicit decision, competes for
+the same cash as the kids — see "Who may play" below for what stands against a
+stranger landing in a payout. Before the first real prize week, look at the
+Players section of `/admin` the same way you look at the flag column.
 
 **1. The PINs and dashboard password are still placeholders.** This is the one
 thing standing between the arcade and a real prize week. They are currently
@@ -44,7 +50,11 @@ npx wrangler secret put PLAYERS --config leaderboard/wrangler.jsonc
 npx wrangler secret put DASHBOARD_PASSWORD --config leaderboard/wrangler.jsonc
 ```
 
-`PLAYERS` is a JSON map of player id → **SHA-256 hex of the PIN**. `wrangler
+`PLAYERS` is a JSON map of player id → **SHA-256 hex of the PIN**. The keys must
+be exactly the lowercase ids — `{"Danylo": …}` is refused with a 500 rather than
+served, because it used to demote him to an ordinary self-signup in silence.
+While you are in there, use 6–8 digits: signup being open to the internet makes a
+4-digit PIN worth walking, and the length costs a kid nothing. `wrangler
 secret put` prompts, so the real values are typed and never pass through a
 transcript.
 
@@ -86,6 +96,60 @@ in all three, without that feeling unfair.
 
 ---
 
+## Who may play
+
+Two registries. Once a player exists, both kinds are treated identically — same
+board, same prize points, same joint standings, same payout proposal.
+
+- **family** — Danylo, Mike and Sofia, in the `PLAYERS` secret. Their names
+  always exist and nobody else can claim them.
+- **open** — the friends the kids bring home. They tap **+ NEW PLAYER** on the
+  game-over screen, pick a name and a PIN, and they are in.
+
+Full equality was asked for deliberately. It means a friend who plays all three
+games once can take the joint prize on their first afternoon, which is a real
+thing that can happen and not a bug.
+
+One address can fill all 60 slots in about twelve minutes at the current
+throttle, so treat a suddenly-full registry as the squat it probably is and use
+"Remove all self-signups".
+
+Because signup is open to anyone with the URL, two things carry the weight:
+
+1. **Everyone is marked, everywhere.** Any name not in the secret carries a
+   `visitor` badge — on the dashboard, on the hub's boards, and in the tables the
+   games themselves show, including on a week that has already been closed, which
+   is the week a payout gets decided from. That last one matters most: the kids
+   never see the dashboard, and a name is not proof of who somebody is. If the
+   `PLAYERS` secret is ever unreadable, nothing is marked at all rather than
+   everything being marked wrongly.
+2. **The Players section removes one, or all of them.** Removing holds the name,
+   deletes the account and clears their scores for the week on screen. It refuses
+   on a closed week, and refuses for family — whose PINs are in a secret and
+   cannot be changed from a web page. "Remove all self-signups" exists because
+   one address can fill all 60 slots in about an hour, and undoing that one row
+   at a time is not a recovery.
+
+Guards that exist without needing a decision: signing up and failing to sign in
+are both throttled per IP at the edge (5 a minute, on separate budgets so a
+guesser cannot jam the signup form), the registry caps at 60 self-registered
+players and can be cleared in one action, removed names are held rather than
+freed, `guest` and friends are reserved, and a name mixing writing systems is
+refused — `danylо` with a Cyrillic о is not a name, it is a costume.
+
+Two things that guard does NOT catch, so the `visitor` badge has to: a name in
+one script that mimics another (`МІКЕ`, all Cyrillic, is glyph-identical to MIKE
+once the games uppercase it), and digits standing in for letters (`dany1o`).
+Closing those means a confusables table, which would also start refusing names
+real people have. The badge is on every board precisely because this rule stops
+short.
+
+**None of that makes a 4-digit PIN secret.** Throttling raises the cost of
+walking one; it does not stop somebody patient, and it never stops somebody with
+many addresses. The PIN buys attribution, not secrecy — the real defence is still
+the flag column and a human approving every payout. When you rotate the
+placeholders, 6 to 8 digits costs a kid nothing and is worth taking.
+
 ## Things not to undo without reading why
 
 Each is explained at length in the file named; this is the index of decisions
@@ -116,6 +180,34 @@ that look wrong until you know the reason.
 - **`ALLOWED_ORIGINS` does not restrict access.** It only sets a response header.
   Another origin's write still succeeds; `curl` ignores the mechanism entirely.
   The gate on writing is the PIN.
+
+- **Every refusal to sign in says the same thing, everywhere.**
+  (`leaderboard/worker.js`) `/join` says "that name is taken" whether the PIN was
+  wrong or the name is a kid's, and the score endpoint says "wrong player or pin"
+  whether or not the account exists. Splitting either into a more helpful pair
+  turns them into a free test for whose account exists. The score endpoint DID
+  say "unknown player" vs "wrong pin" for a while, which made /join's careful
+  wording decorative.
+
+- **Removing a player leaves a tombstone, not a hole.** (`leaderboard/players.js`)
+  Deleting the record outright frees the name, and the person you just threw off
+  re-registers it in one tap with the same PIN — which makes the dashboard's only
+  enforcement action a suggestion. "Allow again" lifts it.
+
+- **The PLAYERS secret is refused unless every key is already a normalized id.**
+  (`leaderboard/worker.js`) `{"Danylo": …}` used to mean Danylo's own correct PIN
+  registered him as an ordinary self-signup instead of signing him in as family —
+  silently, and his name then belonged to a KV row. A 500 gets looked at; a
+  quietly demoted kid does not.
+
+- **Removing a player never touches a closed week.** (`leaderboard/worker.js`)
+  The frozen snapshot is what a kid checks the arithmetic against. Editing it
+  would make every past week worth exactly as much as your word.
+
+- **The client's copy of the name rule is not the authority.**
+  (`site/shared/leaderboard.js`) It exists so the form can complain while you
+  type. `leaderboard/players.js` decides, and `test/name-cases.js` is run against
+  both so they cannot drift silently.
 
 - **The fishing fight's telegraph and surge are the entire skill.**
   (`site/fish/src/fish.js`) Without them a thermostat that never looks at the
@@ -150,6 +242,7 @@ can be judged rather than argued about.
 | `quality.js` | the adaptive scaler identical three times; only `apply()` and the per-preset scene flags differ. Wants an injected `onApply(preset)` plus a per-game extras bag. |
 | `touch.js` | never reused. Fishing wants one contextual button, the city wants a keyboard. |
 | `shared/input.js` | reused unmodified by the city (keyboard only), not at all by fishing (which needs an absolute pointer and no lock). **Do not share input** — the three games want opposite things. |
+| `shared/identity.js` | shared from the start, and the exception that proves the rule: identity is one fact across the arcade, so three copies would be three chances for the three games to disagree about who you are. |
 
 Three modules identified as worth sharing *with their seams already known*, and
 two identified as not worth sharing at all. Guessing after the first game would

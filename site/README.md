@@ -83,13 +83,20 @@ input one wrong.
 
 Each game posts to the worker in [`../leaderboard`](../leaderboard). Boards run
 Monday to Sunday, `America/Toronto`. Play as Danylo, Mike or Sofia with a PIN —
-asked once per device, on the game-over screen, never before playing — or as a
-guest, whose scores stay on that device.
+asked once per device, on the game-over screen, never before playing — or tap
+**+ NEW PLAYER** and pick your own name and PIN, which is how a friend the kids
+bring home gets on the same board and competes for the same prize. GUEST is
+still there for someone who just wants a go; their scores stay on that device.
+
+The strip of names is built by [`shared/identity.js`](shared/identity.js), not by
+markup: it is the three kids, plus whoever has signed in on this device, plus
+GUEST, plus signup — only the first and third are known ahead of time.
 
 With no `LEADERBOARD_URL` set, everything still works; the board just lives in
 this browser and says so.
 
-Storage keys: `play.name` and `play.pin` are shared across games, while
+Storage keys: `play.name`, `play.pin` and `play.players` (the friends who have
+signed in on this device) are shared across games, while
 `play.scores.<game>` is per game. All three games are one origin, so
 un-namespaced keys would have them overwriting each other. The old
 `nectarnova.*` keys are carried over once, so nobody's saved name or personal
@@ -127,10 +134,20 @@ quality dropdown visibly changes tiers and the FPS readout moves, all eight
 toggles respond · M mutes · die, and the game-over screen shows all four stats
 and a rank.
 
-**Nova, submitting:** pick a name from the roster — the PIN box appears for a
-kid and not for GUEST · a wrong PIN says `WRONG PIN` and lets you retry, and
-does *not* claim the board is unreachable · a correct PIN posts and reports a
-rank plus prize points · GUEST saves locally and the table says `THIS DEVICE`.
+**Nova, submitting:** pick a name — the PIN box appears for a player and not for
+GUEST · a wrong PIN says `WRONG PIN` and lets you retry, and does *not* claim the
+board is unreachable · a correct PIN posts and reports a rank plus prize points ·
+GUEST saves locally and the table says `THIS DEVICE`.
+
+**Signing up:** + NEW PLAYER opens a name and PIN box · a name under two
+characters, with no letter, or mixing scripts is refused before any request · a
+taken name says so without revealing whether the account exists · a successful
+signup adds a button for that name, fills in the PIN, and flips SAVE HERE to POST
+SCORE · typing in either box must not steer the car or fire the ship · come back
+later and the name is a button, needing only the PIN again · save a run as GUEST
+and THEN sign up, and the submit button must come back to life so that run can
+still be posted · anyone who isn't one of the three kids shows a VISITOR tag on
+every board.
 
 **Nova, phone:** portrait shows the rotate screen · landscape shows the stick and
 all five buttons · auto-fire defaults on · starts on a low graphics tier and

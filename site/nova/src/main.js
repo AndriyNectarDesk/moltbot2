@@ -16,7 +16,8 @@ import { Projectiles, Pickups } from "./projectiles.js"
 import { HUD } from "./hud.js"
 import { Quality, PRESETS } from "./quality.js"
 import { TouchControls } from "./touch.js"
-import { GUEST, Leaderboard } from "../../shared/leaderboard.js"
+import { Leaderboard } from "../../shared/leaderboard.js"
+import { bindIdentity } from "../../shared/identity.js"
 import { Brute, Lancer, MoltbotPrime, Skitter, Zipper } from "./enemies.js"
 
 const $ = (id) => document.getElementById(id)
@@ -235,29 +236,27 @@ class Game {
 		const pinInput = $("go-pin")
 		const msg = $("go-submit-msg")
 
-		const paintRoster = () => {
-			for (const btn of document.querySelectorAll(".who")) {
-				btn.classList.toggle("on", btn.dataset.who === (this.board.name || GUEST))
-			}
-			// A guest plays for themselves; there's nothing to prove.
-			const guest = !this.board.isRostered
-			$("go-pin-wrap").classList.toggle("hidden", guest)
-			submitBtn.textContent = guest ? "SAVE HERE" : "POST SCORE"
-		}
-
-		for (const btn of document.querySelectorAll(".who")) {
-			btn.onclick = () => {
-				const who = btn.dataset.who
-				if (who !== this.board.name) this.board.forgetPin()
-				this.board.setName(who === GUEST ? "" : who)
-				pinInput.value = this.board.pin
+		// The strip of names, the signup form and the PIN field are shared across
+		// all three games — one identity for the whole arcade.
+		this._identity = bindIdentity({
+			board: this.board,
+			row: document.querySelector(".who-row"),
+			pinWrap: $("go-pin-wrap"),
+			pinInput,
+			onChange: () => {
 				msg.textContent = ""
 				msg.classList.remove("warn")
-				paintRoster()
-			}
-		}
-
-		pinInput.value = this.board.pin
+				// A guest plays for themselves; there's nothing to prove.
+				submitBtn.textContent = this.board.hasIdentity ? "POST SCORE" : "SAVE HERE"
+				// Whoever is playing has changed, so the last submission's outcome no
+				// longer applies. Without this, a friend who taps SAVE HERE and THEN
+				// signs up is left holding a disabled button that reads POST SCORE,
+				// and that run can never reach the board — the exact first-run
+				// experience of the person this signup form exists for.
+				this._submitted = false
+				submitBtn.disabled = false
+			},
+		})
 		pinInput.addEventListener("keydown", (e) => {
 			e.stopPropagation()
 			if (e.key === "Enter") submitBtn.click()
@@ -266,7 +265,7 @@ class Game {
 		submitBtn.onclick = async () => {
 			if (this._submitted) return
 
-			if (this.board.isRostered) {
+			if (this.board.hasIdentity) {
 				const pin = pinInput.value.trim()
 				if (!pin) {
 					msg.textContent = "ENTER YOUR PIN"
@@ -283,15 +282,22 @@ class Game {
 			msg.classList.remove("warn")
 			msg.textContent = ""
 
+			// Claimed before the await, not after. Changing who is playing re-arms
+			// this button on purpose (a guest who saved and then signed up must be
+			// able to post that run), and that can happen while a submission is
+			// still in flight — so the second click has to already know the run is
+			// on the local table, or it appends a duplicate under the new name.
+			const alreadySaved = this._localSaved
+			this._localSaved = true
+
 			const res = await this.board.submit({
 				score: this.score,
 				stats: { wave: this.wave, kills: this.kills, combo: this.bestCombo },
 				durationMs: this.runMs,
 				// The run is saved locally on the first attempt; a retry must not
 				// append a second copy of it.
-				skipLocal: this._localSaved,
+				skipLocal: alreadySaved,
 			})
-			this._localSaved = true
 
 			this._renderBoard($("go-board"), res.entries.slice(0, 8), {
 				shared: res.shared,
@@ -342,8 +348,6 @@ class Game {
 			}
 			this.refreshTitleBoard()
 		}
-
-		paintRoster()
 	}
 
 	/** Paint a score table into a container. */
@@ -362,7 +366,7 @@ class Game {
 				return (
 					`<div class="board-row top-${i + 1}${you}">` +
 					`<span class="rk">${i + 1}</span>` +
-					`<span class="nm">${name.toUpperCase()}</span>` +
+					`<span class="nm">${name.toUpperCase()}${e.visitor ? ` <span class="vis">VISITOR</span>` : ""}</span>` +
 					`<span class="wv">${wave ? `W${wave}` : ""}</span>` +
 					`<span class="sc">${Number(e.score).toLocaleString()}</span>` +
 					`</div>`
@@ -494,8 +498,9 @@ class Game {
 		$("go-submit-msg").textContent = ""
 		$("go-submit-msg").classList.remove("warn")
 		$("btn-submit").disabled = false
-		$("btn-submit").textContent = this.board.isRostered ? "POST SCORE" : "SAVE HERE"
-		$("go-pin-wrap").classList.toggle("hidden", !this.board.isRostered)
+		// Repaints the name strip and sets the submit button to match who is
+		// playing — a friend may have signed up since the last run.
+		this._identity.refresh()
 		this._submitted = false
 		this._localSaved = false
 		this.board.top(8).then(({ entries, shared }) =>
