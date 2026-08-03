@@ -44,7 +44,9 @@ and puts the rare fish on the table; open water takes five and mostly doesn't.
 
 **Learning the tells.** Every species announces itself before it commits, and the
 float is the only thing that tells you. A flurry of tiny taps is a sunfish. Two
-firm dips is a perch. One solid thump is a bass. If the float just leans over and
+firm dips is a perch — and two SLOW leans, twice as drawn out, is a carp, which
+is the difference worth learning because one is worth six times the other. One
+solid thump is a bass. If the float just leans over and
 keeps going, something big has it. Strike **after** it goes under — striking
 during the taps spooks the fish, and waiting too long loses it.
 
@@ -82,6 +84,7 @@ sturgeon is the beginning of the problem, not the reward.
 | Perch | 2× | 280 g – 900 g |
 | Bass | 4× | 900 g – 2.6 kg |
 | Pike | 9× | 2.2 kg – 6.5 kg |
+| Carp | 12× | 3 kg – 13 kg |
 | Sturgeon | 20× | 6 kg – 17 kg |
 
 **Flow** is the multiplier for landing fish back to back — +0.5× each, up to 3×.
@@ -102,7 +105,7 @@ Boards run Monday to Sunday. Pick who you are and enter a PIN — asked once per
 device, on the game-over screen, never before playing. **GUEST** keeps scores on
 the device only.
 
-Stats sent: `landed`, `heaviest` (grams), `species` (distinct, out of 5) and
+Stats sent: `landed`, `heaviest` (grams), `species` (distinct, out of 6) and
 `flow` (best multiplier ×10). The heaviest fish is what shows on the board next
 to your score, because it's the number a kid actually brags about.
 

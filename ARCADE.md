@@ -26,7 +26,7 @@ leaderboard/          the Cloudflare Worker — see leaderboard/README.md
 ```
 
 Run everything locally with `npm run site` (→ http://127.0.0.1:5180/). Tests are
-`npm test` — **509** of them, and they run in CI on every push and PR.
+`npm test` — **510** of them, and they run in CI on every push and PR.
 
 ---
 
