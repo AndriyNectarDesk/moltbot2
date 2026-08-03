@@ -64,7 +64,7 @@ game's copies against Nova's:
   The scheduler's *shape* is
   reused but its numbers are not (52 bpm against 132, a longer look-ahead), and
   the sound bank and the music are wholly new. Worth splitting into an engine
-  plus a per-game bank.
+  plus a per-game bank — now done, as above.
 - **`quality.js` — scaler identical all three times; only `apply()` and the
   per-preset scene flags differ**, exactly as predicted, three for three. The
   shared version wants an injected `onApply(preset)` plus a per-game extras bag,
