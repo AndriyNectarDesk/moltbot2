@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from "vitest"
 import { HISTORY_WEEKS, clampWeek, isWeekKeyShape, nextWeekKey, prevWeekKey } from "./hub-weeks.js"
-import { nextWeek } from "../leaderboard/week.js"
+import { isWeekKey, nextWeek } from "../leaderboard/week.js"
 
 describe("week stepping", () => {
 	// DST-adjacent Mondays matter because America/Toronto shifts on
@@ -53,6 +53,27 @@ describe("week stepping", () => {
 })
 
 describe("key shape", () => {
+	// The file's whole justification is that a duplicated rule stays pinned to
+	// the worker's. Shape alone was pinned; "is it a Monday" was not, and a
+	// Tuesday sailed through the client to a guaranteed 400.
+	it("agrees with the worker on what is a week, Mondays and not", () => {
+		const probes = [
+			"2026-07-27", // Monday
+			"2026-07-28", // Tuesday
+			"2026-07-30", // Thursday
+			"2026-08-02", // Sunday
+			"2026-08-03", // Monday
+			"2026-02-30", // not a date at all
+			"2026-7-27", // unpadded
+		]
+		for (const k of probes) {
+			const clamped = clampWeek(k, "2026-08-03")
+			// Whatever the client hands the worker must be a key the worker accepts.
+			expect(isWeekKey(clamped), `${k} → ${clamped}`).toBe(true)
+		}
+	})
+
+
 	it("accepts real dates and rejects everything else", () => {
 		expect(isWeekKeyShape("2026-07-27")).toBe(true)
 		expect(isWeekKeyShape("2026-02-30")).toBe(false) // not a real date

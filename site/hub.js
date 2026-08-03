@@ -55,12 +55,12 @@ async function getJson(path) {
 
 const badge = (p) => (p.visitor ? ` <span class="vis">VISITOR</span>` : "")
 
-function renderJoint(standings, winner) {
+function renderJoint(standings, winner, isCurrent) {
 	const el = $("joint")
 	if (!standings.length) {
 		el.innerHTML =
 			`<div class="board-title">JOINT BOARD</div>` +
-			`<div class="board-empty">NOBODY PLAYED THIS WEEK</div>`
+			`<div class="board-empty">${isCurrent ? "NOBODY HAS PLAYED YET THIS WEEK" : "NOBODY PLAYED THIS WEEK"}</div>`
 		return
 	}
 	const rows = standings
@@ -132,16 +132,23 @@ function paintNav() {
  */
 function renderWeek(data, verdict) {
 	const isCurrent = cursor === currentWeek
-	renderJoint(data.standings || [], verdict && !verdict.jointTied ? verdict.jointWinner : null)
+	renderJoint(data.standings || [], verdict && !verdict.jointTied ? verdict.jointWinner : null, isCurrent)
 	renderPerGame(data.perGame || {})
 
 	if (isCurrent) {
 		$("week-line").textContent = data.closed
 			? `week of ${weekLabel(data.week)} · closed`
 			: `week of ${weekLabel(data.week)} · still running`
-		$("board-state").textContent = data.closed
-			? "THIS WEEK IS FINISHED"
-			: "MONDAY TO SUNDAY · AMERICA/TORONTO"
+		// Closing usually happens on the Sunday evening, so the current week can
+		// already have a winner — saying only "FINISHED" would hide it for the
+		// rest of the day the prize was actually decided.
+		$("board-state").textContent = !data.closed
+			? "MONDAY TO SUNDAY · AMERICA/TORONTO"
+			: verdict
+				? verdict.jointTied
+					? "FINISHED — DEAD TIE, SPLIT BY HAND"
+					: `FINISHED — WINNER: ${shout(verdict.jointWinner || "")}`
+				: "THIS WEEK IS FINISHED"
 	} else if (data.closed) {
 		$("week-line").textContent = `week of ${weekLabel(data.week)}`
 		$("board-state").textContent = verdict
@@ -169,7 +176,7 @@ async function showWeek(week) {
 	try {
 		const data = await getJson(`/joint?week=${week}`)
 		let verdict = null
-		if (data.closed && week !== currentWeek) {
+		if (data.closed) {
 			// The snapshot carries jointWinner/jointTied; /joint's rows carry the
 			// visitor badges. Two fetches, each doing the one thing only it can.
 			try {
@@ -194,7 +201,7 @@ async function showWeek(week) {
 
 /** Shareable: #2026-07-27 opens on that week. Cleared on the current week. */
 function setHash(week) {
-	history.replaceState(null, "", week === currentWeek ? location.pathname : `#${week}`)
+	history.replaceState(null, "", week === currentWeek ? location.pathname + location.search : `#${week}`)
 }
 
 /**
@@ -220,7 +227,20 @@ async function paintChampion() {
 			if (snap.jointTied) {
 				el.innerHTML = `LAST WEEK: <b>DEAD TIE</b> — SPLIT BY HAND`
 			} else if (top) {
-				el.innerHTML = `LAST WEEK'S CHAMPION: <b>${shout(snap.jointWinner || top.player)}</b> · ${top.total} PTS`
+				// The snapshot carries no visitor field — it is frozen from the
+				// standings, not the public projection — so the badge comes from
+				// /joint, which recomputes it. ARCADE.md requires the mark on every
+				// surface that names a winner on a payout week, and this strip is
+				// the most prominent name on the front page.
+				let marked = ""
+				try {
+					const pub = await getJson(`/joint?week=${prev}`)
+					const row = (pub.standings || []).find((r) => r.player === (snap.jointWinner || top.player))
+					marked = row ? badge(row) : ""
+				} catch {
+					marked = ""
+				}
+				el.innerHTML = `LAST WEEK'S CHAMPION: <b>${shout(snap.jointWinner || top.player)}</b>${marked} · ${top.total} PTS`
 			}
 			el.classList.toggle("hidden", !top && !snap.jointTied)
 			return
@@ -228,7 +248,7 @@ async function paintChampion() {
 		const data = await getJson(`/joint?week=${prev}`)
 		const lead = data.standings && data.standings[0]
 		if (lead) {
-			el.innerHTML = `LAST WEEK: UNDECIDED — <b>${shout(lead.player)}</b> LEADS · NOT CLOSED YET`
+			el.innerHTML = `LAST WEEK: UNDECIDED — <b>${shout(lead.player)}</b>${badge(lead)} LEADS · NOT CLOSED YET`
 			el.classList.remove("hidden")
 		} else {
 			el.classList.add("hidden")
@@ -266,16 +286,18 @@ async function load() {
 
 		paintChampion()
 
+		// Render the week we already have BEFORE paging anywhere. A shared link
+		// whose fetch then fails leaves a real board on screen with an honest
+		// message, instead of a heading over nothing — and it gives showWeek's
+		// revert branch something to revert to.
+		rendered = currentWeek
+		renderWeek(data, null)
+		paintNav()
+
 		// A shared link like #2026-07-27 opens on that week, clamped and
 		// validated; garbage silently means the current week.
 		const asked = clampWeek(decodeURIComponent(location.hash.slice(1)), currentWeek)
-		if (asked !== currentWeek) {
-			await showWeek(asked)
-		} else {
-			rendered = currentWeek
-			renderWeek(data, null)
-			paintNav()
-		}
+		if (asked !== currentWeek) await showWeek(asked)
 	} catch {
 		$("week-line").textContent = "can't reach the prize board right now"
 		$("joint").innerHTML = `<div class="board-empty">TRY AGAIN IN A MOMENT — THE GAMES STILL WORK</div>`

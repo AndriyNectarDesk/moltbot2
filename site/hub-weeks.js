@@ -45,6 +45,12 @@ export const HISTORY_WEEKS = 26
  */
 export function clampWeek(requested, currentWeek) {
 	if (!isWeekKeyShape(requested)) return currentWeek
+	// A real date is not enough: the worker's isWeekKey requires the key to BE
+	// its own Monday and 400s anything else, so a hand-typed #2026-07-30 would
+	// be a guaranteed bad request — and then every step from it lands on another
+	// Thursday. Weeks are Mondays.
+	const [wy, wm, wd] = requested.split("-").map(Number)
+	if (new Date(Date.UTC(wy, wm - 1, wd)).getUTCDay() !== 1) return currentWeek
 	if (requested >= currentWeek) return currentWeek
 	let floor = currentWeek
 	for (let i = 0; i < HISTORY_WEEKS; i++) floor = prevWeekKey(floor)
