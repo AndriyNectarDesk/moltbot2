@@ -89,6 +89,7 @@ jobs:
                    shared/audioengine.js \
                    hub.css \
                    hub.js \
+                   hub-weeks.js \
                    nova/style.css \
                    nova/src/main.js \
                    nova/src/hero.js \
