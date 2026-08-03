@@ -39,15 +39,19 @@ art assets.** Every mesh is primitives, every texture is drawn with canvas at
 load, all sound is synthesised with WebAudio. A game is a folder you can copy.
 
 `shared/` is deliberately small — only things that already have more than one
-consumer. `quality.js`, `audio.js` and `fx.js` stay duplicated per game on
+consumer. `quality.js` and `audio.js` stay duplicated per game on
 purpose: each would need a seam invented for it, and inventing a seam with one
-real consumer reliably produces one that fits nobody.
+real consumer reliably produces one that fits nobody. (`fx.js` was in that list
+until all three games proved it byte-identical; it graduated to `shared/fx.js`.)
 
 All three games now exist, so that bet can be scored properly. Diffing each
 game's copies against Nova's:
 
-- **`fx.js` — byte-identical in all three.** Confirmed by md5. This one should
-  just be moved into `shared/`; there is nothing left to learn about it.
+- **`fx.js` — byte-identical in all three.** Confirmed by md5. There was nothing
+  left to learn about it, so it has been moved: it is now `shared/fx.js` and all
+  three games import it from there. It is the one `shared/` module that imports
+  `three` — fine from a game page, but the hub has no import map, so `hub.js`
+  must never pull it in.
 - **`audio.js` — synth primitives identical, everything above them different.**
   `init`, `_env`, `_tone` and `_noise` are unchanged. The scheduler's *shape* is
   reused but its numbers are not (52 bpm against 132, a longer look-ahead), and
@@ -71,7 +75,8 @@ game's copies against Nova's:
   `pointer.js`. Two consumers wanting opposite things from one module is exactly
   the seam that shouldn't be invented.
 
-**Conclusion now that all three exist:** move `fx.js` into `shared/` as-is; split
+**Conclusion now that all three exist:** move `fx.js` into `shared/` as-is
+(done); split
 `audio.js` into an engine plus a per-game bank; give `quality.js` an
 `onApply(preset)` callback and share it. Leave input alone — one game wants locked
 deltas, one wants an absolute pointer, one wants only keys, and no single module

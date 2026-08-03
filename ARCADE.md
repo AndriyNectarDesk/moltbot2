@@ -224,8 +224,9 @@ that look wrong until you know the reason.
   to rebuild at random every load, so buildings moved and collected stars
   reappeared in streets you'd never driven down.
 
-- **`quality.js`, `audio.js` and `fx.js` are copied per game, not shared.**
-  Deliberate, and now scored — see below.
+- **`quality.js` and `audio.js` are copied per game, not shared.**
+  Deliberate, and now scored — see below. (`fx.js` was the third of these until
+  the scoring proved it byte-identical; it now lives in `site/shared/fx.js`.)
 
 ---
 
@@ -237,7 +238,7 @@ can be judged rather than argued about.
 
 | module | outcome |
 | --- | --- |
-| `fx.js` | **byte-identical in all three** (md5 confirmed). Just move it into `shared/`. |
+| `fx.js` | **byte-identical in all three** (md5 confirmed). Moved into `shared/fx.js` — the one part of this verdict that is now done. |
 | `audio.js` | synth primitives identical three times; the sound bank and music are wholly new each time. Split into an engine plus a per-game bank. |
 | `quality.js` | the adaptive scaler identical three times; only `apply()` and the per-preset scene flags differ. Wants an injected `onApply(preset)` plus a per-game extras bag. |
 | `touch.js` | never reused, and rightly: all three ended up with different touch schemes. Nova has its stick and action buttons, fishing folds touch into its one-button `pointer.js`, and the city grew its own pedal buttons (`city/src/touch.js`) — digital, because the car was tuned against ±1 keyboard input. |

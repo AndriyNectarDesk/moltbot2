@@ -111,7 +111,9 @@ to your score, because it's the number a kid actually brags about.
 
 ## Notes for whoever touches this next
 
-**`quality.js`, `fx.js` and `audio.js` are copies of Nova's, not shared code.**
+**`quality.js` and `audio.js` are copies of Nova's, not shared code.** (`fx.js`
+was one too, until all three games proved it byte-identical; it now lives in
+`../shared/fx.js`.)
 That was deliberate — see [`../README.md`](../README.md). What actually differed
 once the game existed:
 
@@ -124,7 +126,8 @@ once the game existed:
   the music are new. A shooter wants sharp transients and a driving minor
   arpeggio; a lake wants soft attacks and a slow pentatonic pad.
 - `fx.js` — byte-identical, and only `ringBurst`, `update` and `setScale` are
-  used. This one probably *is* worth sharing when the third game lands.
+  used. It was worth sharing once the third game landed, and now is shared:
+  `../shared/fx.js`.
 - `touch.js` — not copied at all. This game needs one contextual button and the
   water as a target, so Nova's five-button pad and virtual stick were no use.
 - **`pointer.js` is new, not `shared/input.js`.** That module is built on pointer

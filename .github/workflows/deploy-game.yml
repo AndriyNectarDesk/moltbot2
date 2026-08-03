@@ -84,6 +84,7 @@ jobs:
                    shared/input.js \
                    shared/leaderboard.js \
                    shared/config.js \
+                   shared/fx.js \
                    hub.css \
                    hub.js \
                    nova/style.css \
@@ -93,7 +94,6 @@ jobs:
                    nova/src/world.js \
                    nova/src/projectiles.js \
                    nova/src/hud.js \
-                   nova/src/fx.js \
                    nova/src/audio.js \
                    nova/src/quality.js \
                    nova/src/touch.js \
@@ -108,7 +108,6 @@ jobs:
                    fish/src/pointer.js \
                    fish/src/audio.js \
                    fish/src/quality.js \
-                   fish/src/fx.js \
                    city/ \
                    city/style.css \
                    city/src/main.js \
@@ -120,7 +119,6 @@ jobs:
                    city/src/hud.js \
                    city/src/audio.js \
                    city/src/quality.js \
-                   city/src/fx.js \
                    vendor/jsm/postprocessing/EffectComposer.js \
                    vendor/jsm/postprocessing/RenderPass.js \
                    vendor/jsm/postprocessing/UnrealBloomPass.js \

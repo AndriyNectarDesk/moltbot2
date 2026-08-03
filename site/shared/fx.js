@@ -1,8 +1,11 @@
 // GPU-friendly effects: one big additive point cloud for sparks/smoke, plus a
 // small pool of expanding rings, shockwaves and beams.
+//
+// Bare "three" needs the importing page's import map — every game page carries
+// one; the hub does not, so hub.js must never (transitively) import this file.
 
 import * as THREE from "three"
-import { clamp, rand, TAU } from "../../shared/util.js"
+import { clamp, rand, TAU } from "./util.js"
 
 const MAX_PARTICLES = 2000
 

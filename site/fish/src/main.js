@@ -25,7 +25,7 @@ import { makeFishMesh } from "./fishmesh.js"
 import { ROD_BASE, Rod } from "./rod.js"
 import { HUD } from "./hud.js"
 import { Pointer } from "./pointer.js"
-import { FX } from "./fx.js"
+import { FX } from "../../shared/fx.js"
 import { Quality } from "./quality.js"
 
 const $ = (id) => document.getElementById(id)
