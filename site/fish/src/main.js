@@ -68,6 +68,9 @@ class Game {
 		this.lake = new Lake(this.scene)
 		this.fx = new FX(this.scene)
 		this.rod = new Rod(this.scene, this.lake)
+		// The real view height lands via _resize before the first frame; this just
+		// hands the rod its camera.
+		this.rod.setView(this.camera, innerHeight * (window.devicePixelRatio || 1))
 
 		this._buildAim()
 
@@ -136,6 +139,8 @@ class Game {
 		this.camera.updateProjectionMatrix()
 		this.renderer.setSize(w, h, false)
 		this.composer.setSize(w, h)
+		// The line ribbon's screen-space width floor needs the render height.
+		this.rod.setView(this.camera, h * this.renderer.getPixelRatio())
 		// composer.setSize resizes the bloom to the full viewport, so the preset's
 		// bloomScale has to be re-applied after it — otherwise the five-mip chain
 		// runs at 100% on every tier that has bloom on, which is roughly 4x the
