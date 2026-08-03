@@ -17,7 +17,7 @@ part has its own README with the detail.
 ```
 site/                 the games — see site/README.md
   index.html …        the hub: three cards + the joint prize board
-  shared/             util, input, the score client, identity strip, fx, base.css
+  shared/             util, input, the score client, identity strip, fx, the audio engine, base.css
   vendor/             three.js r185, shared by all three games
   nova/               DANYLO: NECTAR NOVA   3D arena shooter
   fish/               MIKE: QUIET WATER     3-minute fishing runs
@@ -26,7 +26,7 @@ leaderboard/          the Cloudflare Worker — see leaderboard/README.md
 ```
 
 Run everything locally with `npm run site` (→ http://127.0.0.1:5180/). Tests are
-`npm test` — **510** of them, and they run in CI on every push and PR.
+`npm test` — **528** of them, and they run in CI on every push and PR.
 
 ---
 
@@ -224,9 +224,14 @@ that look wrong until you know the reason.
   to rebuild at random every load, so buildings moved and collected stars
   reappeared in streets you'd never driven down.
 
-- **`quality.js` and `audio.js` are copied per game, not shared.**
-  Deliberate, and now scored — see below. (`fx.js` was the third of these until
-  the scoring proved it byte-identical; it now lives in `site/shared/fx.js`.)
+- **`quality.js` is copied per game, not shared.**
+  Deliberate, and now scored — see below. (`fx.js` and the audio *engine* both
+  graduated once the scoring proved them identical: `site/shared/fx.js` and
+  `site/shared/audioengine.js`. Each game's `audio.js` still owns its bank and
+  music — the per-game part — and the engine's header documents exactly which
+  fields and methods those subclasses may reach into. `_step`, `_nextNote` and
+  `_musicTimer` live in the engine but are used only by the per-game music
+  schedulers; they are not dead code.)
 
 ---
 
@@ -239,7 +244,7 @@ can be judged rather than argued about.
 | module | outcome |
 | --- | --- |
 | `fx.js` | **byte-identical in all three** (md5 confirmed). Moved into `shared/fx.js` — the one part of this verdict that is now done. |
-| `audio.js` | synth primitives identical three times; the sound bank and music are wholly new each time. Split into an engine plus a per-game bank. |
+| `audio.js` | synth primitives identical three times; the sound bank and music are wholly new each time. Split done: the engine is `shared/audioengine.js`, each game's `Audio` extends it with its own bank and music. |
 | `quality.js` | the adaptive scaler identical three times; only `apply()` and the per-preset scene flags differ. Wants an injected `onApply(preset)` plus a per-game extras bag. |
 | `touch.js` | never reused, and rightly: all three ended up with different touch schemes. Nova has its stick and action buttons, fishing folds touch into its one-button `pointer.js`, and the city grew its own pedal buttons (`city/src/touch.js`) — digital, because the car was tuned against ±1 keyboard input. |
 | `shared/input.js` | reused unmodified by the city (keyboard only), not at all by fishing (which needs an absolute pointer and no lock). **Do not share input** — the three games want opposite things. |

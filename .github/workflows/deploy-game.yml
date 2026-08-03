@@ -84,9 +84,12 @@ jobs:
                    shared/input.js \
                    shared/leaderboard.js \
                    shared/config.js \
+                   shared/identity.js \
                    shared/fx.js \
+                   shared/audioengine.js \
                    hub.css \
                    hub.js \
+                   hub-weeks.js \
                    nova/style.css \
                    nova/src/main.js \
                    nova/src/hero.js \
@@ -119,10 +122,17 @@ jobs:
                    city/src/hud.js \
                    city/src/audio.js \
                    city/src/quality.js \
+                   city/src/touch.js \
                    vendor/jsm/postprocessing/EffectComposer.js \
                    vendor/jsm/postprocessing/RenderPass.js \
                    vendor/jsm/postprocessing/UnrealBloomPass.js \
                    vendor/jsm/postprocessing/OutputPass.js \
+                   vendor/jsm/postprocessing/ShaderPass.js \
+                   vendor/jsm/postprocessing/MaskPass.js \
+                   vendor/jsm/postprocessing/Pass.js \
+                   vendor/jsm/shaders/CopyShader.js \
+                   vendor/jsm/shaders/LuminosityHighPassShader.js \
+                   vendor/jsm/shaders/OutputShader.js \
                    favicon.svg \
                    preview.png; do
             # --retry-all-errors so Pages propagation lag gets another go; a file

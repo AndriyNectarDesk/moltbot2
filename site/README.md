@@ -32,6 +32,7 @@ site/
     util.js  input.js           maths helpers, keyboard/mouse/pointer-lock
     leaderboard.js  config.js   the score client and the API URL
     fx.js                       particle effects — the one shared module needing three.js
+    audioengine.js              WebAudio setup + synth primitives; banks stay per game
   nova/                         one folder per game, self-contained
 ```
 
@@ -40,10 +41,13 @@ art assets.** Every mesh is primitives, every texture is drawn with canvas at
 load, all sound is synthesised with WebAudio. A game is a folder you can copy.
 
 `shared/` is deliberately small — only things that already have more than one
-consumer. `quality.js` and `audio.js` stay duplicated per game on
-purpose: each would need a seam invented for it, and inventing a seam with one
+consumer. `quality.js` stays duplicated per game on
+purpose: it would need a seam invented for it, and inventing a seam with one
 real consumer reliably produces one that fits nobody. (`fx.js` was in that list
-until all three games proved it byte-identical; it graduated to `shared/fx.js`.)
+until all three games proved it byte-identical; it graduated to `shared/fx.js`.
+`audio.js` split along the line the scoring found: the engine — WebAudio setup
+and the synth primitives — graduated to `shared/audioengine.js`, and each game's
+`audio.js` keeps its own bank and music on top of it.)
 
 All three games now exist, so that bet can be scored properly. Diffing each
 game's copies against Nova's:
@@ -54,10 +58,13 @@ game's copies against Nova's:
   `three` — fine from a game page, but the hub has no import map, so `hub.js`
   must never pull it in.
 - **`audio.js` — synth primitives identical, everything above them different.**
-  `init`, `_env`, `_tone` and `_noise` are unchanged. The scheduler's *shape* is
+  `init`, `_env`, `_tone` and `_noise` are unchanged — and are now the shared
+  `AudioEngine` class in `shared/audioengine.js`, which each game's `Audio`
+  extends; the engine's header documents exactly what subclasses may reach into.
+  The scheduler's *shape* is
   reused but its numbers are not (52 bpm against 132, a longer look-ahead), and
   the sound bank and the music are wholly new. Worth splitting into an engine
-  plus a per-game bank.
+  plus a per-game bank — now done, as above.
 - **`quality.js` — scaler identical all three times; only `apply()` and the
   per-preset scene flags differ**, exactly as predicted, three for three. The
   shared version wants an injected `onApply(preset)` plus a per-game extras bag,
@@ -78,7 +85,7 @@ game's copies against Nova's:
 
 **Conclusion now that all three exist:** move `fx.js` into `shared/` as-is
 (done); split
-`audio.js` into an engine plus a per-game bank; give `quality.js` an
+`audio.js` into an engine plus a per-game bank (done); give `quality.js` an
 `onApply(preset)` callback and share it. Leave input alone — one game wants locked
 deltas, one wants an absolute pointer, one wants only keys, and no single module
 serves all three without a mode flag threaded through every method.
