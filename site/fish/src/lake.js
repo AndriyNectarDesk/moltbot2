@@ -220,18 +220,29 @@ export class Lake {
 	 * sun. Pooled quads riding the same surface the bobber rides.
 	 *
 	 * Two rules protect the game under it. It lives entirely BEYOND casting
-	 * range (CAST_MAX 34; the path starts at 38), so it can never sit on water
-	 * the player is reading for spots. And it is warm gold and capped below the
-	 * shimmer school's 0.7 opacity, so it cannot be mistaken for the school —
-	 * the school is a cool cyan-white and it is the best water in the game.
+	 * range — the path runs 37..52 out and its jitter is PERPENDICULAR to the
+	 * sun line only, which can never bring a glint closer to shore than its
+	 * base distance (the first version jittered along both axes, and about one
+	 * lake in a hundred spawned a glint on castable water). And it is warm
+	 * gold, capped below the shimmer school's 0.7 opacity, so it cannot be
+	 * mistaken for the school — the cool cyan thing that is the best water in
+	 * the game.
+	 *
+	 * The 37..52 band is also WHY it reads at all: the far-shore bank is an
+	 * opaque box spanning z −49..−75, and a longer path marching to the horizon
+	 * has most of its glints depth-tested away behind the bank — ten quads
+	 * shipped, two visible. Every distance here keeps the glint in front of it.
 	 */
 	_buildGlitter() {
 		this._glitterTex = blobTexture("rgba(255,216,150,0.8)", "rgba(235,175,110,0.2)")
 		this.glitter = new THREE.Group()
 		this._glints = []
-		const dir = { x: SUN_DIR[0] / Math.hypot(SUN_DIR[0], SUN_DIR[2]), z: SUN_DIR[2] / Math.hypot(SUN_DIR[0], SUN_DIR[2]) }
+		const along = Math.hypot(SUN_DIR[0], SUN_DIR[2])
+		const dir = { x: SUN_DIR[0] / along, z: SUN_DIR[2] / along }
+		const perp = { x: -dir.z, z: dir.x }
 		for (let i = 0; i < 10; i++) {
-			const d = 38 + i * 8 + rand(-2, 2)
+			const d = 37 + i * 1.6
+			const side = rand(-2.5, 2.5)
 			const m = new THREE.Mesh(
 				new THREE.PlaneGeometry(rand(1.4, 3.0), rand(0.4, 0.8)),
 				new THREE.MeshBasicMaterial({
@@ -242,7 +253,7 @@ export class Lake {
 				}),
 			)
 			m.rotation.x = -Math.PI / 2
-			m.position.set(dir.x * d + rand(-2.5, 2.5), 0.04, dir.z * d + rand(-2.5, 2.5))
+			m.position.set(dir.x * d + perp.x * side, 0.04, dir.z * d + perp.z * side)
 			this.glitter.add(m)
 			this._glints.push({ mesh: m, speed: rand(0.6, 1.4), phase: rand(0, TAU) })
 		}
