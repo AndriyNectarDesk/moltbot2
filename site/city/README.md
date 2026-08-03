@@ -140,10 +140,12 @@ because `groundAt` is a step function at the ramp edges and an unclamped rate
 there reaches several hundred metres per second.
 
 **Copied rather than shared:** `quality.js` (again, only `apply()` and the
-preset flags differ) and `audio.js`
-(synth primitives identical, bank and music new). `fx.js` got the opposite
+preset flags differ). `fx.js` got the opposite
 verdict — byte-identical for the third time, so it now lives in
-`../shared/fx.js` and this game imports it from there. `shared/input.js` IS reused
+`../shared/fx.js` and this game imports it from there. `audio.js` split down
+the middle: the identical synth engine is `../shared/audioengine.js`, and this
+game's `audio.js` keeps its own bank (the skid voice) and the radio on top of
+it. `shared/input.js` IS reused
 here as-is, unmodified — its pointer-lock machinery is all on the mouse path, so
 the keyboard half works untouched. That's the first genuine reuse of it outside
 the shooter, and it's written up in [`../README.md`](../README.md).

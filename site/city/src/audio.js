@@ -1,15 +1,16 @@
-// Fully procedural audio — no sample files, everything is synthesised with WebAudio.
-//
-// The synth primitives below (init/_env/_tone/_noise) are the shooter's,
-// unchanged for a third time now, which is a fair sign they should be shared. The
-// bank above them and the music are this game's own.
+// CITY LIGHTS' sound bank and music. The synthesis engine — WebAudio setup and
+// the _tone/_noise/_env primitives — lives in ../../shared/audioengine.js,
+// promoted there once all three games had proved it byte-identical. The bank
+// and the music stay here, and they are this game's own.
 //
 // The music here is a RADIO: three stations you cycle with R, each a different
-// pattern over the same scheduler. That's the cheapest possible thing that makes
-// a city feel like a place you're driving through rather than a level.
+// pattern over the same scheduler, leaning in as you go faster. That's the
+// cheapest possible thing that makes a city feel like a place you're driving
+// through rather than a level.
 
-import { clamp, rand } from "../../shared/util.js"
+import { clamp } from "../../shared/util.js"
 import { DRIFT_AT } from "./car.js"
+import { AudioEngine } from "../../shared/audioengine.js"
 
 /**
  * How loud the tyres should be, 0..1, from how far sideways the car slides.
@@ -29,117 +30,7 @@ export function skidLevel(slipAmount, airborne) {
 	return clamp((slipAmount - DRIFT_AT * 0.8) / 6, 0, 1)
 }
 
-export class Audio {
-	constructor() {
-		this.ctx = null
-		this.enabled = true
-		this.master = null
-		this.musicGain = null
-		this.sfxGain = null
-		this.noiseBuffer = null
-		this._musicTimer = null
-		this._step = 0
-		this._nextNote = 0
-		this.intensity = 0 // 0..1, tracks speed — the radio leans in as you go faster
-	}
-
-	/** Must be called from a user gesture. */
-	init() {
-		if (this.ctx) return
-		const AC = window.AudioContext || window.webkitAudioContext
-		if (!AC) {
-			this.enabled = false
-			return
-		}
-		this.ctx = new AC()
-		this.master = this.ctx.createGain()
-		this.master.gain.value = 0.75
-		this.master.connect(this.ctx.destination)
-
-		// A gentle limiter keeps the big explosions from clipping.
-		const comp = this.ctx.createDynamicsCompressor()
-		comp.threshold.value = -12
-		comp.ratio.value = 8
-		comp.attack.value = 0.003
-		comp.release.value = 0.18
-		comp.connect(this.master)
-		this.bus = comp
-
-		this.musicGain = this.ctx.createGain()
-		this.musicGain.gain.value = 0.0
-		this.musicGain.connect(this.bus)
-
-		this.sfxGain = this.ctx.createGain()
-		this.sfxGain.gain.value = 0.9
-		this.sfxGain.connect(this.bus)
-
-		// Pre-baked white noise, reused by every noise-based effect.
-		const len = this.ctx.sampleRate * 2
-		this.noiseBuffer = this.ctx.createBuffer(1, len, this.ctx.sampleRate)
-		const data = this.noiseBuffer.getChannelData(0)
-		for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1
-	}
-
-	resume() {
-		if (this.ctx && this.ctx.state === "suspended") this.ctx.resume()
-	}
-
-	setEnabled(on) {
-		this.enabled = on
-		if (this.master) this.master.gain.value = on ? 0.75 : 0
-	}
-
-	get t() {
-		return this.ctx.currentTime
-	}
-
-	_ready() {
-		return this.ctx && this.enabled
-	}
-
-	_env(node, t0, peak, attack, decay) {
-		const g = node.gain
-		g.cancelScheduledValues(t0)
-		g.setValueAtTime(0.0001, t0)
-		g.exponentialRampToValueAtTime(Math.max(peak, 0.0002), t0 + attack)
-		g.exponentialRampToValueAtTime(0.0001, t0 + attack + decay)
-	}
-
-	_tone({ type = "sine", freq = 440, to = null, dur = 0.2, gain = 0.3, attack = 0.005, dest = null, detune = 0 }) {
-		const t0 = this.t
-		const osc = this.ctx.createOscillator()
-		const g = this.ctx.createGain()
-		osc.type = type
-		osc.frequency.setValueAtTime(freq, t0)
-		osc.detune.value = detune
-		if (to !== null) osc.frequency.exponentialRampToValueAtTime(Math.max(to, 1), t0 + dur)
-		this._env(g, t0, gain, attack, dur)
-		osc.connect(g)
-		g.connect(dest || this.sfxGain)
-		osc.start(t0)
-		osc.stop(t0 + dur + attack + 0.05)
-		return { osc, g }
-	}
-
-	_noise({ dur = 0.3, gain = 0.3, type = "lowpass", freq = 1200, to = null, q = 1, dest = null }) {
-		const t0 = this.t
-		const src = this.ctx.createBufferSource()
-		src.buffer = this.noiseBuffer
-		src.loop = true
-		const filt = this.ctx.createBiquadFilter()
-		filt.type = type
-		filt.frequency.setValueAtTime(freq, t0)
-		filt.Q.value = q
-		if (to !== null) filt.frequency.exponentialRampToValueAtTime(Math.max(to, 20), t0 + dur)
-		const g = this.ctx.createGain()
-		this._env(g, t0, gain, 0.006, dur)
-		src.connect(filt)
-		filt.connect(g)
-		g.connect(dest || this.sfxGain)
-		src.start(t0)
-		src.stop(t0 + dur + 0.1)
-	}
-
+export class Audio extends AudioEngine {
 	// ---------------------------------------------------------------- SFX
 	// ------------------------------------------------------------ the city
 
@@ -363,9 +254,5 @@ export class Audio {
 			src.start(when)
 			src.stop(when + 0.08)
 		}
-	}
-
-	setIntensity(v) {
-		this.intensity = clamp(v, 0, 1)
 	}
 }

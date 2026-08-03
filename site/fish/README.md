@@ -111,9 +111,10 @@ to your score, because it's the number a kid actually brags about.
 
 ## Notes for whoever touches this next
 
-**`quality.js` and `audio.js` are copies of Nova's, not shared code.** (`fx.js`
-was one too, until all three games proved it byte-identical; it now lives in
-`../shared/fx.js`.)
+**`quality.js` is a copy of Nova's, not shared code.** (`fx.js` and the audio
+engine were copies too, until all three games proved them identical; they now
+live in `../shared/fx.js` and `../shared/audioengine.js`. This game's `audio.js`
+keeps only its own bank and music, extending the shared engine.)
 That was deliberate — see [`../README.md`](../README.md). What actually differed
 once the game existed:
 
@@ -121,7 +122,8 @@ once the game existed:
   itself is unchanged. It also gained `waterStep`, because displacing ~2,400
   water vertices per frame is this game's single biggest cost and interleaving
   the rows is a better trade than a coarser mesh.
-- `audio.js` — the synth primitives (`_tone`, `_noise`, `_env`) are unchanged;
+- `audio.js` — the synth primitives (`_tone`, `_noise`, `_env`) were unchanged,
+  and are now inherited from `../shared/audioengine.js`;
   the scheduler keeps its shape but not its tempo, and the whole sound bank and
   the music are new. A shooter wants sharp transients and a driving minor
   arpeggio; a lake wants soft attacks and a slow pentatonic pad.
