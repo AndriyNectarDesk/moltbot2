@@ -9,7 +9,7 @@
 import * as THREE from "three"
 import { TAU, clamp, damp, lerp } from "../../shared/util.js"
 
-const LINE_POINTS = 10
+const LINE_POINTS = 15
 
 /** Where the angler stands, at the end of the dock. */
 export const ROD_BASE = new THREE.Vector3(0.55, 1.05, -3.6)
@@ -75,32 +75,109 @@ export class Rod {
 	_buildBobber() {
 		this.bobberGroup = new THREE.Group()
 		const top = new THREE.Mesh(
-			new THREE.SphereGeometry(0.11, 10, 8, 0, TAU, 0, Math.PI / 2),
-			new THREE.MeshStandardMaterial({ color: 0xd9542f, roughness: 0.45 }),
+			new THREE.SphereGeometry(0.14, 10, 8, 0, TAU, 0, Math.PI / 2),
+			new THREE.MeshStandardMaterial({ color: 0xff5a30, roughness: 0.45 }),
 		)
 		const bottom = new THREE.Mesh(
-			new THREE.SphereGeometry(0.11, 10, 8, 0, TAU, Math.PI / 2, Math.PI / 2),
+			new THREE.SphereGeometry(0.14, 10, 8, 0, TAU, Math.PI / 2, Math.PI / 2),
 			new THREE.MeshStandardMaterial({ color: 0xf2ece0, roughness: 0.5 }),
 		)
 		const stick = new THREE.Mesh(
-			new THREE.CylinderGeometry(0.014, 0.014, 0.3, 5),
+			new THREE.CylinderGeometry(0.018, 0.018, 0.3, 5),
 			new THREE.MeshStandardMaterial({ color: 0xe8e2d4, roughness: 0.6 }),
 		)
 		stick.position.y = 0.19
-		this.bobberGroup.add(top, bottom, stick)
+		// The hi-vis tip, and the one part that is deliberately UNLIT: real
+		// floats carry a bright bead for exactly this reason, and an unlit
+		// material cannot go dark against dark water on the tiers with no bloom.
+		const bead = new THREE.Mesh(
+			new THREE.SphereGeometry(0.05, 8, 6),
+			new THREE.MeshBasicMaterial({ color: 0xffd23f }),
+		)
+		bead.position.y = 0.35
+		this.bobberGroup.add(top, bottom, stick, bead)
 		this.bobberGroup.visible = false
 		this.scene.add(this.bobberGroup)
+
+		// A faint fixed ring at the waterline. It anchors the float on dark
+		// water, and because it stays AT the surface while the float dips, the
+		// dip reads against a reference instead of against open water. Its own
+		// texture, deliberately NOT lake.js's ringTexture: that bright cool
+		// double stroke is the RISING FISH signal, the highest-value read in the
+		// game, and a miniature copy under the float would be a false spot.
+		const c = document.createElement("canvas")
+		c.width = c.height = 64
+		const x = c.getContext("2d")
+		x.strokeStyle = "rgba(255,226,178,0.5)"
+		x.lineWidth = 3
+		x.beginPath()
+		x.arc(32, 32, 26, 0, TAU)
+		x.stroke()
+		const tex = new THREE.CanvasTexture(c)
+		tex.colorSpace = THREE.SRGBColorSpace
+		this.floatRing = new THREE.Mesh(
+			new THREE.PlaneGeometry(0.7, 0.7),
+			new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.3, depthWrite: false }),
+		)
+		this.floatRing.rotation.x = -Math.PI / 2
+		this.floatRing.visible = false
+		// A sibling of the group, not a child: a child would sink with the dip
+		// and tilt with the lean, destroying its whole purpose as the fixed
+		// reference the dip is read against.
+		this.scene.add(this.floatRing)
 	}
 
 	_buildLine() {
+		// A ribbon, not a THREE.Line: linewidth is dead on WebGL, so a Line is a
+		// one-pixel hairline at every distance, and at the capped pixel ratios
+		// the low tiers run it aliases into a dotted arc — which is exactly how
+		// it looked in the first real phone screenshot. Two vertices per catenary
+		// sample, offset perpendicular to the view direction so the strip always
+		// faces the camera; one draw call.
 		const geo = new THREE.BufferGeometry()
-		geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(LINE_POINTS * 3), 3))
-		this.line = new THREE.Line(
+		geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(LINE_POINTS * 2 * 3), 3))
+		const index = []
+		for (let i = 0; i < LINE_POINTS - 1; i++) {
+			const a = i * 2
+			index.push(a, a + 1, a + 2, a + 1, a + 3, a + 2)
+		}
+		geo.setIndex(index)
+		this.line = new THREE.Mesh(
 			geo,
-			new THREE.LineBasicMaterial({ color: 0xdfe6e2, transparent: true, opacity: 0.55 }),
+			new THREE.MeshBasicMaterial({
+				color: 0xeef4f0,
+				transparent: true,
+				opacity: 0.85,
+				side: THREE.DoubleSide,
+				// Explicit and load-bearing: with depthWrite off, the 0.97-opacity
+				// water overdraws the line to near-invisibility — the exact bug
+				// this ribbon exists to fix, reintroduced invisibly.
+				depthWrite: true,
+			}),
 		)
+		// The float arcs metres above the tip-to-float chord mid-cast; stale
+		// bounds would cull the ribbon in flight, so it opts out entirely.
+		this.line.frustumCulled = false
 		this.line.visible = false
 		this.scene.add(this.line)
+		this._side = new THREE.Vector3()
+		this._tangent = new THREE.Vector3()
+		this._toCam = new THREE.Vector3()
+		this._sample = new THREE.Vector3()
+		// Set by setView; harmless defaults so the rod renders before the first
+		// resize event lands.
+		this._camera = null
+		this._viewHeight = 800
+	}
+
+	/** The camera and render height, for the ribbon's screen-space width floor. */
+	setView(camera, pixelHeight) {
+		this._camera = camera
+		// A hidden iframe reports a 0-height viewport (same trap _resize guards
+		// against in main.js). Flooring at 1 turned the pixel floor into a
+		// ~1.4-unit-per-metre multiplier and inflated the far line to tens of
+		// metres wide; 240 is the smallest height any real screen shows.
+		this._viewHeight = Math.max(240, pixelHeight || 0)
 	}
 
 	/** World position of the rod tip, recomputed each frame because the rod bends. */
@@ -153,6 +230,8 @@ export class Rod {
 		// permanently bent on the title screen.
 		this.charge = 0
 		this.bobberGroup.visible = false
+		this.bobberGroup.scale.setScalar(1)
+		this.floatRing.visible = false
 		this.line.visible = false
 	}
 
@@ -194,10 +273,24 @@ export class Rod {
 
 		if (this.inWater) {
 			const surface = this.lake.heightAt(this.bobber.x, this.bobber.z)
-			this.bobber.y = surface - this._sinkShown
+			// Distance compensation: a float that reads at 10m is two pixels at
+			// 30m, so it grows with the cast — and the VISUAL dip grows with it,
+			// so the proportional submersion of a tell is the same at every
+			// distance. The physics sink is untouched; only the rendered offset
+			// scales. Constant during wait/tell (the float lands and stays), so
+			// the bite read is never confounded by the scale changing under it.
+			const s = clamp(Math.hypot(this.bobber.x - ROD_BASE.x, this.bobber.z - ROD_BASE.z) / 14, 1, 1.6)
+			this.bobberGroup.scale.setScalar(s)
+			this.bobber.y = surface - this._sinkShown * s
 			// Lean into the pull rather than staying upright.
 			const lean = clamp(this._sinkShown * 1.6 + tension * 0.5, 0, 1.1)
 			this.bobberGroup.rotation.z = Math.sin(this.lake.time * 1.7) * 0.06 + lean * 0.5
+
+			this.floatRing.visible = true
+			this.floatRing.position.set(this.bobber.x, surface + 0.02, this.bobber.z)
+			this.floatRing.scale.setScalar(s)
+		} else {
+			this.floatRing.visible = false
 		}
 
 		this.bobberGroup.position.copy(this.bobber)
@@ -214,13 +307,68 @@ export class Rod {
 		// after the rod bend itself.
 		const sag = lerp(0.55, 0.03, clamp(this.taut, 0, 1)) * (this.cast ? 0.2 : 1)
 		const span = tip.distanceTo(this.bobber)
+
+		// Screen-space width floor: at 34m a constant-width ribbon subtends less
+		// than a pixel on a low-tier phone and aliases into the same dotted arc
+		// as the hairline it replaced. Each sample is at least ~1.3 rendered
+		// pixels wide, whatever the distance.
+		const cam = this._camera
+		const k =
+			cam ? (1.3 * 2 * Math.tan((cam.fov * Math.PI) / 360)) / this._viewHeight : 0
+		const camPos = cam ? cam.position : null
+
+		let px = 0
+		let py = 0
+		let pz = 0
 		for (let i = 0; i < LINE_POINTS; i++) {
-			const k = i / (LINE_POINTS - 1)
-			arr[i * 3] = lerp(tip.x, this.bobber.x, k)
-			arr[i * 3 + 1] = lerp(tip.y, this.bobber.y, k) - Math.sin(k * Math.PI) * sag * span * 0.09
-			arr[i * 3 + 2] = lerp(tip.z, this.bobber.z, k)
+			const t = i / (LINE_POINTS - 1)
+			const sx = lerp(tip.x, this.bobber.x, t)
+			const sy = lerp(tip.y, this.bobber.y, t) - Math.sin(t * Math.PI) * sag * span * 0.09
+			const sz = lerp(tip.z, this.bobber.z, t)
+
+			// Tangent along the curve, from the previous sample (forward for i=0).
+			if (i === 0) {
+				const nt = 1 / (LINE_POINTS - 1)
+				this._tangent.set(
+					lerp(tip.x, this.bobber.x, nt) - sx,
+					lerp(tip.y, this.bobber.y, nt) - Math.sin(nt * Math.PI) * sag * span * 0.09 - sy,
+					lerp(tip.z, this.bobber.z, nt) - sz,
+				)
+			} else {
+				this._tangent.set(sx - px, sy - py, sz - pz)
+			}
+
+			// Half-width: tapers toward the float, floored in screen space.
+			const dist = camPos ? this._sample.set(sx, sy, sz).distanceTo(camPos) : 10
+			// Capped absolutely as well: no viewport state, however broken, may
+			// turn the line into a ribbon wider than the float.
+			const half = Math.min(Math.max(0.013 * lerp(1, 0.6, t), dist * k), 0.28) / 2
+
+			// Side vector perpendicular to both the curve and the view direction,
+			// so the strip faces the camera. The camera looks DOWN the casting
+			// lane and so does the line, so near-parallel is the common case, not
+			// the freak one: when the cross degenerates, keep the previous side.
+			if (camPos) {
+				this._toCam.set(camPos.x - sx, camPos.y - sy, camPos.z - sz)
+				const side = this._side.crossVectors(this._tangent, this._toCam)
+				if (side.lengthSq() > 1e-8) side.normalize()
+				else if (i === 0) side.set(1, 0, 0)
+				// else: keep whatever _side already holds from the last sample
+			} else {
+				this._side.set(1, 0, 0)
+			}
+
+			arr[i * 6] = sx + this._side.x * half
+			arr[i * 6 + 1] = sy + this._side.y * half
+			arr[i * 6 + 2] = sz + this._side.z * half
+			arr[i * 6 + 3] = sx - this._side.x * half
+			arr[i * 6 + 4] = sy - this._side.y * half
+			arr[i * 6 + 5] = sz - this._side.z * half
+
+			px = sx
+			py = sy
+			pz = sz
 		}
 		pos.needsUpdate = true
-		this.line.geometry.computeBoundingSphere()
 	}
 }
