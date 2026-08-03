@@ -200,14 +200,19 @@ export class Lake {
 	 */
 	_buildSunGlow() {
 		const dir = new THREE.Vector3(...SUN_DIR).normalize()
+		// 50 units at 380 away subtends ~7.5 degrees — a low sun with a halo. The
+		// first version shipped at 150, which is 22 degrees of sky: on the high
+		// tier, where bloom is on, that read as a floodlight washing out half the
+		// frame, and Andriy's screenshot showed exactly that. Opacity down for the
+		// same reason: bloom multiplies whatever this puts out.
 		this.sunGlow = new THREE.Mesh(
-			new THREE.PlaneGeometry(150, 150),
+			new THREE.PlaneGeometry(50, 50),
 			new THREE.MeshBasicMaterial({
 				map: blobTexture("rgba(255,224,166,0.95)", "rgba(255,190,120,0.30)"),
 				transparent: true,
 				depthWrite: false,
 				fog: false,
-				opacity: 0.9,
+				opacity: 0.55,
 			}),
 		)
 		this.sunGlow.position.copy(dir.multiplyScalar(380))
