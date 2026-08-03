@@ -164,6 +164,38 @@ export const SPECIES = {
 			surge: 0.41,
 		},
 	},
+	carp: {
+		label: "CARP",
+		rare: 12,
+		grams: [3000, 13000],
+		colour: 0x8a6b35,
+		belly: 0xd9c491,
+		w0: 1.2,
+		w1: 22,
+		// Two SLOW deliberate leans, then it takes. Same tap count as a perch,
+		// completely different rhythm — a perch dips twice in ~0.6s, a carp
+		// takes 1.24s over it, and telling those apart is the reading skill.
+		tell: { taps: 2, tapMs: 400, gapMs: 220, sink: 0.36, windowMs: 740 },
+		fight: {
+			pull: 0.5,
+			reelTension: 0.68,
+			ease: 0.61,
+			runTake: 2.55,
+			reelRate: 5.4,
+			runDur: [1.1, 1.8],
+			restDur: [1.5, 2.4],
+			// The most stamina below the sturgeon: a carp is famously stubborn,
+			// and the long grinding fight a patient player wins is the species'
+			// whole character.
+			stamina: 22,
+			// seconds of telegraph before a run, and the instant tension hit
+			// when it starts — see the header. Bigger fish announce it for longer
+			// and hit harder, so they are readable but unforgiving if you are not.
+			warn: 0.48,
+			surge: 0.42,
+		},
+	},
+
 	sturgeon: {
 		label: "STURGEON",
 		rare: 20,

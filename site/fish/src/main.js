@@ -483,7 +483,7 @@ class Game {
 		$("go-landed").textContent = this.landed
 		$("go-heaviest").textContent =
 			this.heaviest >= 1000 ? `${(this.heaviest / 1000).toFixed(2)}kg` : `${this.heaviest}g`
-		$("go-species").textContent = `${Object.keys(this.caught).length}/5`
+		$("go-species").textContent = `${Object.keys(this.caught).length}/${Object.keys(SPECIES).length}`
 		$("go-flow").textContent = `${this.bestFlow.toFixed(1)}×`
 		let rank = RANKS[0][1]
 		for (const [min, name] of RANKS) if (this.score >= min) rank = name

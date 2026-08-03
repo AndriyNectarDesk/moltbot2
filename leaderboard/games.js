@@ -44,10 +44,10 @@ export const GAMES = {
 		stats: {
 			landed: { min: 0, max: 500 },
 			heaviest: { min: 0, max: 20_000 }, // grams; the biggest sturgeon is 17kg
-			species: { min: 0, max: 5 },
+			species: { min: 0, max: 6 },
 			flow: { min: 10, max: 30 }, // best multiplier ×10, so 1.0× … 3.0×
 		},
-		// `species` and `flow` are omitted on purpose: catching all five species
+		// `species` and `flow` are omitted on purpose: catching every species
 		// and maxing the flow multiplier are both things the game is asking you to
 		// do, and a measured skilled run hits the flow cap routinely.
 		suspiciousMax: ["landed", "heaviest"],

@@ -17,6 +17,15 @@ const WATER_SEGS = 48
 export const CAST_MIN = 6
 export const CAST_MAX = 34
 
+/**
+ * Where the sun is, shared by the light, the glow billboard and the glitter
+ * path so all three agree by construction. v1 sat at azimuth ~37 degrees off
+ * the casting lane, which put the visible sun outside the camera frustum on a
+ * 16:10 screen — a dawn whose light source is never on screen. ~20 degrees
+ * keeps it in frame across the aspects the games actually run at.
+ */
+export const SUN_DIR = [-14, 11, -38]
+
 function makeCanvas(w, h = w) {
 	const c = document.createElement("canvas")
 	c.width = w
@@ -46,9 +55,12 @@ function waterTexture() {
 	const S = 512
 	const { c, x } = makeCanvas(S)
 	const g = x.createLinearGradient(0, 0, 0, S)
+	// More contrast than v1, gained ONLY by lightening the light end — the water
+	// is most of the frame and the potato tier has no bloom, so darkening it is
+	// the literal CITY LIGHTS failure mode.
 	g.addColorStop(0, "#12333f")
-	g.addColorStop(0.5, "#17414d")
-	g.addColorStop(1, "#1c4d55")
+	g.addColorStop(0.5, "#1a4854")
+	g.addColorStop(1, "#266069")
 	x.fillStyle = g
 	x.fillRect(0, 0, S, S)
 	// Broad blotches read as depth variation once the surface is moving.
@@ -57,6 +69,14 @@ function waterTexture() {
 		x.fillStyle = `rgba(${randInt(30, 70)},${randInt(80, 130)},${randInt(100, 150)},0.05)`
 		x.beginPath()
 		x.arc(rand(0, S), rand(0, S), r, 0, TAU)
+		x.fill()
+	}
+	// A few warm blotches, so the dawn light reads IN the water and not only
+	// above it.
+	for (let i = 0; i < 22; i++) {
+		x.fillStyle = `rgba(${randInt(190, 230)},${randInt(150, 185)},${randInt(95, 130)},0.035)`
+		x.beginPath()
+		x.arc(rand(0, S), rand(0, S), rand(40, 110), 0, TAU)
 		x.fill()
 	}
 	const t = new THREE.CanvasTexture(c)
@@ -143,7 +163,9 @@ export class Lake {
 		this._waterOffset = 0
 
 		this._buildSky()
+		this._buildSunGlow()
 		this._buildWater()
+		this._buildGlitter()
 		this._buildShore()
 		this._buildDock()
 		this._buildLilies()
@@ -167,6 +189,66 @@ export class Lake {
 		this.scene.add(this.sky)
 	}
 
+	/**
+	 * The sun itself, as a soft billboard along the real light direction.
+	 *
+	 * NOT painted into the sky texture: that texture is a 1D vertical gradient,
+	 * and going 2D means aligning an azimuth through sphere UVs and a wrap seam
+	 * — exactly the kind of thing that ships wrong invisibly here. A billboard
+	 * placed along `sun.position` is aligned by construction, and a test can
+	 * project it through the camera and prove it is actually in frame.
+	 */
+	_buildSunGlow() {
+		const dir = new THREE.Vector3(...SUN_DIR).normalize()
+		this.sunGlow = new THREE.Mesh(
+			new THREE.PlaneGeometry(150, 150),
+			new THREE.MeshBasicMaterial({
+				map: blobTexture("rgba(255,224,166,0.95)", "rgba(255,190,120,0.30)"),
+				transparent: true,
+				depthWrite: false,
+				fog: false,
+				opacity: 0.9,
+			}),
+		)
+		this.sunGlow.position.copy(dir.multiplyScalar(380))
+		this.sunGlow.lookAt(0, 2, 0)
+		this.scene.add(this.sunGlow)
+	}
+
+	/**
+	 * The glitter path: the streak of dawn light on the water, pointing at the
+	 * sun. Pooled quads riding the same surface the bobber rides.
+	 *
+	 * Two rules protect the game under it. It lives entirely BEYOND casting
+	 * range (CAST_MAX 34; the path starts at 38), so it can never sit on water
+	 * the player is reading for spots. And it is warm gold and capped below the
+	 * shimmer school's 0.7 opacity, so it cannot be mistaken for the school —
+	 * the school is a cool cyan-white and it is the best water in the game.
+	 */
+	_buildGlitter() {
+		this._glitterTex = blobTexture("rgba(255,216,150,0.8)", "rgba(235,175,110,0.2)")
+		this.glitter = new THREE.Group()
+		this._glints = []
+		const dir = { x: SUN_DIR[0] / Math.hypot(SUN_DIR[0], SUN_DIR[2]), z: SUN_DIR[2] / Math.hypot(SUN_DIR[0], SUN_DIR[2]) }
+		for (let i = 0; i < 10; i++) {
+			const d = 38 + i * 8 + rand(-2, 2)
+			const m = new THREE.Mesh(
+				new THREE.PlaneGeometry(rand(1.4, 3.0), rand(0.4, 0.8)),
+				new THREE.MeshBasicMaterial({
+					map: this._glitterTex,
+					transparent: true,
+					depthWrite: false,
+					opacity: 0,
+				}),
+			)
+			m.rotation.x = -Math.PI / 2
+			m.position.set(dir.x * d + rand(-2.5, 2.5), 0.04, dir.z * d + rand(-2.5, 2.5))
+			this.glitter.add(m)
+			this._glints.push({ mesh: m, speed: rand(0.6, 1.4), phase: rand(0, TAU) })
+		}
+		this.scene.add(this.glitter)
+	}
+
 	_buildWater() {
 		const geo = new THREE.PlaneGeometry(WATER_SIZE, WATER_SIZE, WATER_SEGS, WATER_SEGS)
 		geo.rotateX(-Math.PI / 2)
@@ -179,7 +261,7 @@ export class Lake {
 			geo,
 			new THREE.MeshStandardMaterial({
 				map: waterTexture(),
-				roughness: 0.24,
+				roughness: 0.18,
 				metalness: 0.42,
 				transparent: true,
 				opacity: 0.97,
@@ -226,6 +308,20 @@ export class Lake {
 		)
 		this.mist.position.set(0, 2.4, -46)
 		this.scene.add(this.mist)
+
+		// A second, lower band drifting on its own phase. Two layers moving at
+		// different speeds is what makes mist read as a volume instead of a
+		// postcard; it shares the mist quality flag.
+		this.mist2 = new THREE.Mesh(
+			new THREE.PlaneGeometry(WATER_SIZE, 10),
+			new THREE.MeshBasicMaterial({
+				map: blobTexture("rgba(232,228,214,0.42)", "rgba(232,228,214,0.12)"),
+				transparent: true,
+				depthWrite: false,
+			}),
+		)
+		this.mist2.position.set(6, 1.5, -55)
+		this.scene.add(this.mist2)
 	}
 
 	_buildDock() {
@@ -363,7 +459,7 @@ export class Lake {
 		this.scene.add(new THREE.HemisphereLight(0xa9c6d8, 0x24413c, 0.85))
 		// Low sun coming across the water, so the wave crests catch light.
 		this.sun = new THREE.DirectionalLight(0xffd9a0, 1.5)
-		this.sun.position.set(-26, 12, -34)
+		this.sun.position.set(...SUN_DIR)
 		this.sun.castShadow = true
 		this.sun.shadow.camera.left = -22
 		this.sun.shadow.camera.right = 22
@@ -371,7 +467,10 @@ export class Lake {
 		this.sun.shadow.camera.bottom = -22
 		this.sun.shadow.camera.far = 90
 		this.scene.add(this.sun)
-		this.scene.fog = new THREE.Fog(0xb9c7bd, 46, 150)
+		// Warmer than v1 and slightly LIGHTER (luminance may only go up here —
+		// see the CITY LIGHTS note in ARCADE.md), pulled toward the sky's horizon
+		// band so the far water dissolves into dawn instead of into grey.
+		this.scene.fog = new THREE.Fog(0xd3c8ab, 40, 130)
 	}
 
 	// ------------------------------------------------------------ quality
@@ -382,11 +481,13 @@ export class Lake {
 		this.water.receiveShadow = on
 	}
 
-	setDecor(reeds, lilyFlowers, mist) {
+	setDecor(reeds, lilyFlowers, mist, glitter = true) {
 		this.reeds.visible = reeds
 		this.trees.visible = reeds
 		this.lilyGroup.visible = lilyFlowers
 		this.mist.visible = mist
+		this.mist2.visible = mist
+		this.glitter.visible = glitter
 	}
 
 	/**
@@ -557,6 +658,16 @@ export class Lake {
 		this._updateSchool(dt)
 		// Slow drift keeps the horizon from looking pinned.
 		this.mist.material.opacity = 0.55 + Math.sin(this.time * 0.25) * 0.1
+		this.mist2.material.opacity = 0.38 + Math.sin(this.time * 0.17 + 2.1) * 0.09
+		this.mist2.position.x = 6 + Math.sin(this.time * 0.05) * 4
+		if (this.glitter.visible) {
+			for (const g of this._glints) {
+				// Capped at 0.55, comfortably under the school's 0.7 — the glitter
+				// must never outshine the thing the player is hunting for.
+				g.mesh.material.opacity = 0.18 + Math.abs(Math.sin(this.time * g.speed + g.phase)) * 0.37
+				g.mesh.position.y = 0.04 + this.heightAt(g.mesh.position.x, g.mesh.position.z)
+			}
+		}
 	}
 
 	/** Between runs: clear the transient spots so a new morning starts clean. */

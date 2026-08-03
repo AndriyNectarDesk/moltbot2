@@ -88,7 +88,7 @@ describe("the fight rewards restraint", () => {
 	// original version of this suite certified the wrong property because its
 	// "skilled" policy's run check was dead weight.
 	it("punishes a thermostat that never watches the fish", () => {
-		for (const id of ["perch", "bass", "pike", "sturgeon"]) {
+		for (const id of ["perch", "bass", "pike", "carp", "sturgeon"]) {
 			const r = trial(id, SPECIES[id].grams[1], 20, blindAt(0.8), 80)
 			expect(r.landed / 80, `${id} landed rate playing blind at 0.8`).toBeLessThan(0.5)
 		}
@@ -97,7 +97,7 @@ describe("the fight rewards restraint", () => {
 	// Playing blind is still allowed — it just has to be timid, and timid is slow,
 	// because line comes in faster when the line is tighter.
 	it("makes a blind player go slower to stay safe", () => {
-		for (const id of ["bass", "pike", "sturgeon"]) {
+		for (const id of ["bass", "pike", "carp", "sturgeon"]) {
 			const grams = SPECIES[id].grams[1]
 			const safeBlind = trial(id, grams, 20, blindAt(0.5), 60)
 			const attentive = trial(id, grams, 20, reading, 60)
@@ -107,7 +107,7 @@ describe("the fight rewards restraint", () => {
 	})
 
 	it("snaps the line on everything but the smallest fish when held down", () => {
-		for (const id of ["perch", "bass", "pike", "sturgeon"]) {
+		for (const id of ["perch", "bass", "pike", "carp", "sturgeon"]) {
 			const r = trial(id, SPECIES[id].grams[1], 20, greedy, 60)
 			expect(r.snapped / 60, `${id} snap rate when greedy`).toBeGreaterThan(0.9)
 		}
@@ -162,6 +162,18 @@ describe("the fight rewards restraint", () => {
 })
 
 describe("difficulty scales with the prize", () => {
+	it("puts the carp's grind between the pike's and the sturgeon's", () => {
+		// The heavy-bruiser slot is a duration promise, not just a score row: a
+		// carp fight has to feel longer than a pike's and shorter than the
+		// near-mythical sturgeon's, or the roster ordering is a lie.
+		const pike = trial("pike", SPECIES.pike.grams[1], 20, reading, 80)
+		const carp = trial("carp", SPECIES.carp.grams[1], 20, reading, 80)
+		const sturgeon = trial("sturgeon", SPECIES.sturgeon.grams[1], 20, reading, 80)
+		expect(carp.landed).toBe(80)
+		expect(carp.median).toBeGreaterThan(pike.median)
+		expect(carp.median).toBeLessThan(sturgeon.median)
+	})
+
 	it("takes longer to land a bigger fish", () => {
 		const times = SPECIES_IDS.map((id) => trial(id, SPECIES[id].grams[1], 20, reading, 80).median)
 		for (let i = 1; i < times.length; i++) {
@@ -339,6 +351,12 @@ describe("scoring", () => {
 		const best = catchScore("sturgeon", 17000, 3)
 		const good = catchScore("pike", 6500, 3)
 		expect(best / good).toBeGreaterThan(2)
+		// The carp slots in as the second trophy, and the ordering has to hold at
+		// the top: a perfect carp beats a perfect pike, and the sturgeon stays
+		// worth more than double either.
+		const carp = catchScore("carp", 13000, 3)
+		expect(carp).toBeGreaterThan(good)
+		expect(best / carp).toBeGreaterThan(2)
 	})
 })
 

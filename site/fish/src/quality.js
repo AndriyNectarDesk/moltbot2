@@ -20,6 +20,7 @@ export const PRESETS = {
 		reeds: false,
 		lilies: false,
 		mist: false,
+		glitter: false,
 		waterStep: 3,
 	},
 	low: {
@@ -33,6 +34,7 @@ export const PRESETS = {
 		reeds: false,
 		lilies: true,
 		mist: true,
+		glitter: true,
 		waterStep: 2,
 	},
 	medium: {
@@ -46,6 +48,7 @@ export const PRESETS = {
 		reeds: true,
 		lilies: true,
 		mist: true,
+		glitter: true,
 		waterStep: 1,
 	},
 	high: {
@@ -59,6 +62,7 @@ export const PRESETS = {
 		reeds: true,
 		lilies: true,
 		mist: true,
+		glitter: true,
 		waterStep: 1,
 	},
 }
@@ -145,7 +149,7 @@ export class Quality {
 		g.bloom.enabled = p.bloom && g.options.bloom
 		g.renderer.shadowMap.enabled = p.shadows
 		g.lake.setShadows(p.shadows, p.shadowSize)
-		g.lake.setDecor(p.reeds, p.lilies, p.mist)
+		g.lake.setDecor(p.reeds, p.lilies, p.mist, p.glitter)
 		// Displacing every water vertex every frame is this game's single biggest
 		// per-frame cost, so the lowest tiers update a fraction of them per frame.
 		g.lake.setWaterStep(p.waterStep)
