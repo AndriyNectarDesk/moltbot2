@@ -287,7 +287,11 @@ export class Rod {
 			this.bobberGroup.rotation.z = Math.sin(this.lake.time * 1.7) * 0.06 + lean * 0.5
 
 			this.floatRing.visible = true
-			this.floatRing.position.set(this.bobber.x, surface + 0.02, this.bobber.z)
+			// 0.04 above the surface, matching the glitter: the rendered water is a
+			// coarse grid on the low tiers and 0.02 sat inside its interpolation
+			// error, so crests could clip arcs out of the ring exactly where the
+			// ring matters most.
+			this.floatRing.position.set(this.bobber.x, surface + 0.04, this.bobber.z)
 			this.floatRing.scale.setScalar(s)
 		} else {
 			this.floatRing.visible = false
@@ -350,10 +354,17 @@ export class Rod {
 			// the freak one: when the cross degenerates, keep the previous side.
 			if (camPos) {
 				this._toCam.set(camPos.x - sx, camPos.y - sy, camPos.z - sz)
-				const side = this._side.crossVectors(this._tangent, this._toCam)
-				if (side.lengthSq() > 1e-8) side.normalize()
-				else if (i === 0) side.set(1, 0, 0)
-				// else: keep whatever _side already holds from the last sample
+				// Crossed into a SCRATCH vector, not _side: crossing in place would
+				// overwrite the previous side before the length test, so the
+				// keep-the-last-good-side fallback would actually keep the near-zero
+				// garbage — rungs collapsing to the centreline on exactly the
+				// camera-on-line geometry the guard exists for. The first version
+				// shipped that way and its comment described the opposite of its
+				// behaviour; _sample is free here, its dist is already taken.
+				const cross = this._sample.set(0, 0, 0).crossVectors(this._tangent, this._toCam)
+				if (cross.lengthSq() > 1e-8) this._side.copy(cross).normalize()
+				else if (i === 0) this._side.set(1, 0, 0)
+				// else: _side genuinely still holds the last valid sample's side
 			} else {
 				this._side.set(1, 0, 0)
 			}

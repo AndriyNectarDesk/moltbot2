@@ -68,7 +68,9 @@ class Game {
 		this.lake = new Lake(this.scene)
 		this.fx = new FX(this.scene)
 		this.rod = new Rod(this.scene, this.lake)
-		this.rod.setView(this.camera, innerHeight)
+		// The real view height lands via _resize before the first frame; this just
+		// hands the rod its camera.
+		this.rod.setView(this.camera, innerHeight * (window.devicePixelRatio || 1))
 
 		this._buildAim()
 
