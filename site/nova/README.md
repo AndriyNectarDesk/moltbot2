@@ -108,7 +108,7 @@ the void.
 | `src/enemies.js` | The four grunts + MOLTBOT PRIME |
 | `src/world.js` | Arena, sky shader, city, containment shield, collision |
 | `src/projectiles.js` | Pooled bolts and pickups |
-| `src/fx.js` | Particle system, shockwave rings, light bursts, beams |
+| `../shared/fx.js` | Particle system, shockwave rings, light bursts, beams (shared) |
 | `src/hud.js` | DOM HUD, damage numbers, kill feed, banners |
 | `src/audio.js` | Procedural SFX + the looping synth soundtrack |
 | `../shared/input.js` | Keyboard, mouse, pointer lock (shared) |

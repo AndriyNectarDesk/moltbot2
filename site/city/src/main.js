@@ -33,7 +33,7 @@ import { buildCarMesh } from "./carmesh.js"
 import { resolveCircle } from "./collide.js"
 import { SHIFT_SECONDS, Shift } from "./shift.js"
 import { HUD } from "./hud.js"
-import { FX } from "./fx.js"
+import { FX } from "../../shared/fx.js"
 import { Quality } from "./quality.js"
 
 const $ = (id) => document.getElementById(id)
