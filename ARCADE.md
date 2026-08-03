@@ -17,7 +17,7 @@ part has its own README with the detail.
 ```
 site/                 the games — see site/README.md
   index.html …        the hub: three cards + the joint prize board
-  shared/             util, input, the score client, identity strip, base.css
+  shared/             util, input, the score client, identity strip, fx, base.css
   vendor/             three.js r185, shared by all three games
   nova/               DANYLO: NECTAR NOVA   3D arena shooter
   fish/               MIKE: QUIET WATER     3-minute fishing runs

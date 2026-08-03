@@ -31,6 +31,7 @@ site/
     base.css                    tokens, the screen shell, buttons, the score table
     util.js  input.js           maths helpers, keyboard/mouse/pointer-lock
     leaderboard.js  config.js   the score client and the API URL
+    fx.js                       particle effects — the one shared module needing three.js
   nova/                         one folder per game, self-contained
 ```
 
