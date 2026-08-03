@@ -239,3 +239,67 @@ footer {
 		height: 66px;
 	}
 }
+
+/* ============================ WEEK HISTORY ============================ */
+.week-nav {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 14px;
+}
+
+.week-nav .prize-title {
+	margin: 0;
+}
+
+.wk-btn {
+	font-family: inherit;
+	font-size: 20px;
+	line-height: 1;
+	width: 38px;
+	height: 38px;
+	padding: 0;
+	margin: 0;
+	color: var(--cyan);
+	background: rgba(10, 6, 22, 0.6);
+	border: 1px solid rgba(49, 230, 255, 0.35);
+	border-radius: 6px;
+	box-shadow: none;
+	cursor: pointer;
+}
+
+.wk-btn:hover {
+	transform: none;
+	filter: none;
+	box-shadow: none;
+	border-color: var(--cyan);
+	color: #fff;
+}
+
+.wk-btn:disabled {
+	opacity: 0.25;
+	cursor: default;
+	border-color: rgba(255, 255, 255, 0.15);
+	color: rgba(255, 255, 255, 0.4);
+}
+
+.champion {
+	margin: 10px 0 0;
+	font-size: 12px;
+	letter-spacing: 3px;
+	color: var(--orange-hot);
+}
+
+.champion b {
+	color: #fff;
+}
+
+.champion.hidden {
+	display: none;
+}
+
+/* The reigning row on a closed week's board. */
+.board-row.won .nm,
+.board-row.won .pts {
+	color: var(--orange-hot);
+}

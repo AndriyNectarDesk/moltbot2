@@ -51,7 +51,12 @@
 			</section>
 
 			<section class="prize">
-				<h2 class="prize-title">THIS WEEK</h2>
+				<div class="week-nav">
+					<button id="wk-older" class="wk-btn" aria-label="Older week" disabled>&lsaquo;</button>
+					<h2 class="prize-title" id="prize-title">THIS WEEK</h2>
+					<button id="wk-newer" class="wk-btn" aria-label="Newer week" disabled>&rsaquo;</button>
+				</div>
+				<p id="champion" class="champion hidden"></p>
 				<p id="week-line" class="prize-sub">loading…</p>
 
 				<div id="joint" class="board"></div>
